@@ -4,8 +4,7 @@ cask "proxymaxx" do
   version "__VERSION__"
   sha256 "__SHA256__"
 
-  url "https://github.com/AgiMaulana/ProxyMaxx/releases/download/v#{version}/ProxyMaxx-v#{version}.dmg",
-      verified: "github.com/AgiMaulana/ProxyMaxx/"
+  url "https://github.com/AgiMaulana/ProxyMaxx/releases/download/v#{version}/ProxyMaxx-v#{version}.dmg"
   name "ProxyMaxx"
   desc "Native macOS HTTP/HTTPS debugging proxy"
   homepage "https://github.com/AgiMaulana/ProxyMaxx"
@@ -15,19 +14,19 @@ cask "proxymaxx" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "ProxyMaxx.app"
 
   # ProxyMaxx is ad-hoc signed and not notarised, and Homebrew quarantines every cask
   # download it fetches, so macOS would refuse to launch the installed copy. Clear the
-  # attribute on the copy we just installed. Runs once per install and per upgrade.
-  # `brew audit` rejects this stanza in homebrew/cask; in a private tap it is the
+  # attribute on the copy we just installed; this runs once per install and per upgrade.
+  # The cask sandbox already permits writes under the app directory.
+  #
+  # `brew audit` rejects this stanza in homebrew/cask. In a private tap it is the
   # difference between an app that opens and one that does not.
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/ProxyMaxx.app"],
-                   sudo: false
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/ProxyMaxx.app"]
   end
 
   uninstall quit: "com.proxymaxx.app"
