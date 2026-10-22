@@ -79,6 +79,23 @@ separate download; it is signed from the `KEYSTORE_BASE64`, `STORE_PASSWORD`, `K
 and `KEY_PASSWORD` repository secrets. Without them the run still succeeds with an unsigned,
 emulator-only tunnel.
 
+#### Homebrew
+
+```sh
+brew tap AgiMaulana/proxymaxx
+brew trust --tap agimaulana/proxymaxx
+brew install --cask AgiMaulana/proxymaxx/proxymaxx
+```
+
+`brew trust` is needed once, because Homebrew refuses to load a cask from a tap that is not in
+its trust list. The cask clears the quarantine attribute on the app it installs, so ProxyMaxx
+opens without Gatekeeper complaining.
+
+The tap lives at [AgiMaulana/homebrew-proxymaxx](https://github.com/AgiMaulana/homebrew-proxymaxx).
+Its `Casks/proxymaxx.rb` is generated — edit
+[`Scripts/homebrew/proxymaxx.rb`](Scripts/homebrew/proxymaxx.rb) instead, and the `tap` job in
+`release.yml` renders and pushes it on every tag.
+
 To build a signed release locally, keep the keystore and its credentials out of the checkout
 and read them through `xenv`:
 
@@ -88,7 +105,10 @@ xenv -i .env.keystore inject ALIAS PASSWORD -- sh -c '
   KEY_ALIAS="$ALIAS" KEY_PASSWORD="$PASSWORD" Scripts/build-all.sh release'
 ```
 
-The `.app` itself is ad-hoc signed, so macOS quarantines a downloaded copy. Clear it once:
+Installing from the DMG is the other route: mount it and drag ProxyMaxx to Applications. The
+`.app` is ad-hoc signed, so macOS quarantines that copy and Gatekeeper refuses the first
+launch. Homebrew quarantines its downloads too, which is why the cask clears the attribute
+itself; for a DMG install, clear it once by hand:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/ProxyMaxx.app"

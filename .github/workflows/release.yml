@@ -168,14 +168,24 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
 
       # Ad-hoc signing is enough to run locally but not to satisfy Gatekeeper for a
-      # downloaded app, so the release notes carry the one command that fixes it.
+      # downloaded app, so the notes lead with the tap, whose cask clears the quarantine
+      # attribute, and keep the by-hand command for the DMG.
       - name: Append install notes
         run: |
           if [[ -s CHANGES.md ]]; then
             {
               printf '\n## Install\n\n'
-              printf 'Open the DMG, drag **ProxyMaxx** to Applications, then launch it.\n\n'
-              printf 'The app is ad-hoc signed, so macOS quarantines it after download. Clear that once:\n\n'
+              printf '### Homebrew\n\n'
+              printf '```sh\n'
+              printf 'brew tap AgiMaulana/proxymaxx\n'
+              printf 'brew trust --tap agimaulana/proxymaxx\n'
+              printf 'brew install --cask AgiMaulana/proxymaxx/proxymaxx\n'
+              printf '```\n\n'
+              printf '`brew trust` is needed once: Homebrew will not load a cask from an untrusted tap.\n'
+              printf 'The cask clears the quarantine attribute on the installed app, so it opens without a warning.\n\n'
+              printf '### From the DMG\n\n'
+              printf 'Open the DMG, drag **ProxyMaxx** to Applications, then launch it. The app is ad-hoc\n'
+              printf 'signed, so macOS quarantines it after download. Clear that once:\n\n'
               printf '```sh\nxattr -dr com.apple.quarantine "/Applications/ProxyMaxx.app"\n```\n'
             } >> CHANGES.md
           fi
@@ -195,3 +205,60 @@ jobs:
               --title "ProxyMaxx ${GITHUB_REF_NAME}" \
               $NOTES
           fi
+
+  tap:
+    name: Update the Homebrew tap
+    # The cask points at the release asset, so it can only be written once the release exists.
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dmg
+          path: dist
+
+      # Render the cask here so a malformed file fails this run rather than a user's install.
+      # The version comes from the tag, not from the build job: step outputs do not cross jobs.
+      - name: Render the cask
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG="dist/ProxyMaxx-${GITHUB_REF_NAME}.dmg"
+          [[ -f "$DMG" ]] || { echo "::error::$DMG is missing"; exit 1; }
+          SHA="$(shasum -a 256 "$DMG" | cut -d ' ' -f1)"
+          sed -e "s/__VERSION__/${VERSION}/" -e "s/__SHA256__/${SHA}/" \
+            Scripts/homebrew/proxymaxx.rb > "$RUNNER_TEMP/proxymaxx.rb"
+          ruby -c "$RUNNER_TEMP/proxymaxx.rb"
+          grep -qE 'sha256 "[0-9a-f]{64}"' "$RUNNER_TEMP/proxymaxx.rb"
+          echo "Rendered the cask for ${VERSION} (sha256 ${SHA})"
+
+      # A missing token degrades instead of failing the run, the way a missing Android
+      # keystore does: the release itself is still complete.
+      - name: Push the cask to the tap
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$TAP_GITHUB_TOKEN" ]]; then
+            echo "::warning::TAP_GITHUB_TOKEN is not set — the tap was not updated."
+            exit 0
+          fi
+          echo "::add-mask::$TAP_GITHUB_TOKEN"
+          VERSION="${GITHUB_REF_NAME#v}"
+          git clone --depth 1 https://github.com/AgiMaulana/homebrew-proxymaxx.git tap
+          mkdir -p tap/Casks
+          cp "$RUNNER_TEMP/proxymaxx.rb" tap/Casks/proxymaxx.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/proxymaxx.rb
+          if git diff --cached --quiet; then
+            echo "The cask is already current for ${VERSION}"
+            exit 0
+          fi
+          git commit -m "proxymaxx ${VERSION}"
+          # The token travels in a header, never in the remote URL, so it cannot reach the log.
+          git -c http.extraheader="AUTHORIZATION: bearer ${TAP_GITHUB_TOKEN}" \
+            push origin HEAD:main
