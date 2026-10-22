@@ -206,6 +206,9 @@ jobs:
               $NOTES
           fi
 
+  # This job pushes into a *different* repository, which `GITHUB_TOKEN` cannot do: it is an
+  # installation token for the repository the workflow runs in. Hence the PAT. The alternative,
+  # a workflow inside the tap that polls for releases, needs no secret but lags by an hour.
   tap:
     name: Update the Homebrew tap
     # The cask points at the release asset, so it can only be written once the release exists.
