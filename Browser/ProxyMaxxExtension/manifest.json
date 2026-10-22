@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "ProxyMaxx",
+  "version": "1.0.5",
+  "description": "Point this browser at ProxyMaxx and report what is still stopping capture.",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqVg/QjSIJPaX2g5qKDXma1i7we/3DpJNe7ixOD+u7KcPk29ZWhqevoWk7q3XRgKfcD5uDuGHl0f/eA8AJD7PeU9XDT6PMUXucqnZsq/l+IDC6FQt6cf3Mh99i7nXrDi9jCD1smyY170UBMErSa36tqL1g9ySr/U/JQf/dtcDA6QJcM2p00rqw8bERGvNCSANDUbkmOj4LzIkHTEGdlDe1PId7BouBRnIAaX727+iUVZkQfA/3dgMeIURG8O9MS0WkD88sJqnK00UbTPlCgkR/grjFj/8upzxKRD3aEumwRf3M0G3gD1vNU/KzTt3VzbVaBz4qaGOXghDiewyEl+W/QIDAQAB",
+  "permissions": ["proxy", "storage", "nativeMessaging"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "ProxyMaxx",
+    "default_popup": "popup.html"
+  }
+}

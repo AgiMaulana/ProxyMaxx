@@ -1,0 +1,325 @@
+/*
+ Localizable.strings (English).
+
+ Keys are stable identifiers; values are the English copy. Code that builds text in
+ code passes an English default as well, so an unbundled run and the tests still read
+ in English. To add a language, copy this file to
+ Resources/<language>.lproj/Localizable.strings, translate the values (never the
+ keys), keep every %@ and %lld placeholder, then rebuild with Scripts/bundle-app.sh.
+
+ Use Scripts/run.sh during development. `swift run` has no .lproj beside the binary,
+ so SwiftUI would show the keys instead of the English values.
+*/
+
+/* MARK: Common */
+"common.ok" = "OK";
+"common.done" = "Done";
+"common.cancel" = "Cancel";
+"common.add" = "Add";
+"common.delete" = "Delete";
+"common.edit" = "Edit";
+"common.duplicate" = "Duplicate";
+"common.refresh" = "Refresh";
+"common.copy" = "Copy";
+"common.restore" = "Restore";
+"common.start" = "Start";
+"common.stop" = "Stop";
+"common.hostHere" = "Host here";
+"common.notRunning" = "Not running";
+"common.running" = "Running";
+"common.stopped" = "Stopped";
+"common.yes" = "Yes";
+"common.no" = "No";
+"common.trusted" = "Trusted";
+"common.error" = "Error";
+"common.method" = "Method";
+"common.status" = "Status";
+"common.host" = "Host";
+"common.path" = "Path";
+"common.size" = "Size";
+"common.time" = "Time";
+"common.client" = "Client";
+"common.name" = "Name";
+"common.url" = "URL";
+"common.version" = "Version";
+"common.none" = "None";
+"common.empty" = "Empty";
+"common.untitled" = "Untitled";
+"common.any" = "ANY";
+"common.mapLocal" = "Map Local";
+"common.sslProxying" = "SSL Proxying";
+"common.certificates" = "Certificates";
+"common.android" = "Android";
+"common.log" = "Log";
+"common.clear" = "Clear";
+"common.request" = "Request";
+"common.response" = "Response";
+"common.pretty" = "Pretty";
+"common.raw" = "Raw";
+"common.hex" = "Hex";
+"common.general" = "General";
+"common.total" = "Total";
+"common.latency" = "Latency";
+"common.copied" = "Copied";
+"common.anotherApp" = "another app";
+"common.anotherAppInstance" = "another app instance";
+"common.port" = "Port";
+"common.query" = "Query";
+"common.header" = "Header";
+"common.body" = "Body";
+
+/* MARK: Main window */
+"main.favorites" = "Favorites";
+"main.all" = "All";
+"main.pinned" = "Pinned";
+"main.saved" = "Saved";
+"main.apps" = "Apps (%lld)";
+"main.domains" = "Domains (%lld)";
+"main.localAddress" = "127.0.0.1:%lld";
+"main.localAddressWithOwner" = "127.0.0.1:%lld · %@";
+"main.flowCount" = "%lld flows";
+"main.systemProxy" = "System Proxy";
+"main.engineHosted" = "The engine is hosted by the %@ (pid %lld) on 127.0.0.1:%lld%@. Its traffic streams in here live, and `proxymaxx-cli rule` edits apply immediately.";
+"main.socksSuffix" = ", socks %lld";
+"main.hostHereInstead" = "Host here instead";
+"main.systemProxyStale" = "The system proxy still points at 127.0.0.1:%lld and nothing is listening there, so networking will fail until it is cleared.";
+"main.filterPlaceholder" = "Filter by host, path, method or status";
+"main.errorsOnly" = "Errors only";
+"main.mapResponse" = "Map Response to Map Local…";
+"main.copyURL" = "Copy URL";
+"main.copyAsCurl" = "Copy as cURL";
+"main.noFlowSelected" = "No flow selected";
+"main.err" = "ERR";
+"main.selectFlow" = "Select a flow to inspect it";
+
+/* MARK: Flow inspector */
+"inspector.decoded" = "decoded %@";
+"inspector.metric" = "%@: %@";
+"inspector.copyCurlHelp" = "Copy this request as a curl command";
+"inspector.decrypted" = "Decrypted";
+"inspector.tunneled" = "Tunneled";
+"inspector.requestHeaders" = "Request Headers";
+"inspector.requestBody" = "Request Body";
+"inspector.responseHeaders" = "Response Headers";
+"inspector.responseBody" = "Response Body";
+"inspector.waiting" = "Waiting for response…";
+"inspector.webSocketFrames" = "WebSocket Frames";
+"inspector.empty" = "(empty)";
+"inspector.bodySize" = "%lld bytes · %@";
+"inspector.contentType" = "Content-Type";
+"inspector.contentLength" = "Content-Length";
+"inspector.mappedFrom" = "Mapped from";
+
+/* MARK: Map Local */
+"mapLocal.enable" = "Enable Map Local Tool";
+"mapLocal.intro" = "Map a Response with a Local File or Directory. Support Status Code, Headers and Body.";
+"mapLocal.orderHint" = "Each request is checked against the rules from top to bottom, stopping when a match is found.";
+"mapLocal.matchingRule" = "Matching Rule";
+"mapLocal.mapFrom" = "Map from";
+"mapLocal.matchingURLs" = "Matching URLs";
+"mapLocal.mapBody" = "Map Body Response from File";
+"mapLocal.emptyHint" = "Click New Rule to add an entry";
+"mapLocal.noEnabledRules" = "No enabled rules to show";
+"mapLocal.anyURL" = "Any URL";
+"mapLocal.notSet" = "Not set";
+"mapLocal.disableRule" = "Disable Rule";
+"mapLocal.enableRule" = "Enable Rule";
+"mapLocal.showInFinder" = "Show in Finder";
+"mapLocal.newRule" = "New Rule";
+"mapLocal.moveUpHelp" = "Move the rule up. Order decides which rule wins.";
+"mapLocal.showEnabled" = "Show enabled";
+"mapLocal.showEnabledHelp" = "Show enabled rules only";
+"mapLocal.shortcuts" = "New: ⌘N   Edit: ⌘⏎   Delete: ⌘⌫   Duplicate: ⌘D   Toggle: Space";
+"mapLocal.createTitle" = "Create Map Local Rule";
+"mapLocal.editTitle" = "Edit Map Local Rule";
+"mapLocal.formSubtitle" = "Configure URL matching and local response source";
+"mapLocal.nameLabel" = "Name:";
+"mapLocal.untitledRule" = "Untitled Rule";
+"mapLocal.urlLabel" = "URL:";
+"mapLocal.urlPlaceholder" = "api.proxymaxx.com/v1/*";
+"mapLocal.matchStyleLabel" = "Match Style:";
+"mapLocal.includeSubpaths" = "Include all subpaths of this URL";
+"mapLocal.methodLabel" = "Method:";
+"mapLocal.delayLabel" = "Delay:";
+"mapLocal.mapTo" = "Map To";
+"mapLocal.localFile" = "Local File";
+"mapLocal.localDirectory" = "Local Directory";
+"mapLocal.directoryLabel" = "Directory:";
+"mapLocal.filePathLabel" = "File Path:";
+"mapLocal.chooseDirectory" = "Choose directory";
+"mapLocal.filePathPlaceholder" = "File path";
+"mapLocal.select" = "Select…";
+"mapLocal.finder" = "Finder";
+"mapLocal.responseContentLabel" = "Response Content (HTTP Message / Body):";
+"mapLocal.insertTemplate" = "Insert Default Template";
+"mapLocal.fileHint" = "An HTTP/1.x message in the file is served whole, including status and headers. Any other file is served as the body.";
+"mapLocal.directoryHint" = "The request path is resolved inside the directory. A missing file falls through to the remote server.";
+"mapLocal.addRule" = "Add Rule";
+"mapLocal.saveChanges" = "Save Changes";
+"mapLocal.pickDirectoryHelp" = "Pick the directory whose contents answer the matched URL.";
+"mapLocal.pickFileHelp" = "Pick the file whose contents answer the matched URL.";
+"mapLocal.directoryMissing" = "Directory is missing!";
+"mapLocal.fileMissing" = "File is missing!";
+"mapLocal.fileTooLarge" = "File size is bigger than 20Mb could impact the performance!";
+"mapLocal.directoryFound" = "Directory found";
+"mapLocal.fileFound" = "File found";
+"mapLocal.style.contains" = "Contains";
+"mapLocal.style.wildcard" = "Match Wildcard";
+"mapLocal.style.regex" = "Match Regex";
+"mapLocal.style.exact" = "Exact";
+"mapLocal.delay.none" = "No Delay";
+"mapLocal.delay.oneSecond" = "1 second";
+"mapLocal.delay.seconds" = "%lld seconds";
+"mapLocal.style.containsHelp" = "Any URL that contains this text matches. The most forgiving style.";
+"mapLocal.style.wildcardHelp" = "`*` matches any run of characters and `?` matches one. Use `/*` at the end to cover a path and everything below it.";
+"mapLocal.style.regexHelp" = "A full-match regular expression. Wrap the tail in `(.*)` to accept the rest of the URL.";
+"mapLocal.style.exactHelp" = "The request URL must equal this text exactly.";
+
+/* MARK: Matching operators */
+"rule.op.equals" = "equals";
+"rule.op.notEquals" = "not equals";
+"rule.op.contains" = "contains";
+"rule.op.notContains" = "not contains";
+"rule.op.startsWith" = "starts with";
+"rule.op.endsWith" = "ends with";
+"rule.op.wildcard" = "matches wildcard";
+"rule.op.regex" = "matches regex";
+"rule.op.exists" = "exists";
+
+/* MARK: SSL Proxying */
+"ssl.enable" = "Enable SSL Proxying";
+"ssl.intro" = "Decrypt HTTPS traffic for the hosts below. Excluded hosts are relayed opaquely, so their TLS is never intercepted. Wildcards such as `*.example.com` are supported.";
+"ssl.include" = "Include (decrypt these)";
+"ssl.includeEmpty" = "Empty — decrypt everything not excluded";
+"ssl.exclude" = "Exclude (never decrypt)";
+"ssl.exampleHost" = "example.com";
+
+/* MARK: Certificates */
+"cert.root" = "Root Certificate";
+"cert.commonName" = "Common Name";
+"cert.trustedUser" = "Yes (user trust settings)";
+"cert.intro" = "The root CA signs a unique certificate for each host the proxy decrypts. Install and trust it so browsers and tools accept the intercepted connections.";
+"cert.reinstall" = "Reinstall Certificate";
+"cert.installAndTrust" = "Install & Trust Certificate";
+"cert.export" = "Export CA…";
+"cert.installAndroid" = "Install Certificate on Android…";
+"cert.authoriseWith" = "Authorise certificate changes with %@";
+"cert.biometricHelp" = "Ask for %@ instead of an administrator password when installing or removing the root certificate.";
+"cert.trustLocation" = "Where the certificate is trusted";
+"cert.trustedUserHelp" = "Trusted for your user account. This needs no administrator rights, no password and normally no prompt at all.";
+"cert.machineWideHelp" = "Trusting it machine-wide would need an interactive administrator login. macOS gates that with `authenticate-admin`, which no background process can satisfy, so system-wide trust is deliberately not attempted.";
+"cert.manualSetup" = "Manual setup";
+"cert.pointClient" = "Point a client at the proxy:";
+"cert.trustExported" = "Trust the exported CA where the client reads it, e.g.:";
+"cert.activityLog" = "Activity Log";
+
+/* MARK: Settings */
+"settings.proxy" = "Proxy";
+"settings.listenAddress" = "Listen address";
+"settings.httpPort" = "HTTP port";
+"settings.socksPort" = "SOCKS5 port";
+"settings.portHint" = "Change ports while the proxy is stopped. If the SOCKS5 port is in use, the next free port is used.";
+"settings.certificate" = "Certificate";
+"settings.commonName" = "Common name";
+"settings.about" = "About";
+"settings.aboutText" = "ProxyMaxx is a from-scratch HTTP/HTTPS debugging proxy. All features are included; there is no licence or paid tier.";
+
+/* MARK: Android emulator guide */
+"android.emulator.title" = "Android Emulator Setup Guide";
+"android.emulator.intro" = "Install the ProxyMaxx certificate as a system CA and point the emulator's proxy here, so HTTPS traffic can be decrypted. On a Google APIs image this uses `adb root`. Android Studio Google Play AVDs ship a production-signed `adbd`, so there `adb root` is unavailable and the bundled, consent-based Magisk route is offered instead — Magisk compatibility has been tested on API 30-37.";
+"android.emulator.target" = "Target";
+"android.emulator.noDevice" = "No device or emulator is connected. Start one, then press Refresh.";
+"android.emulator.device" = "Device";
+"android.emulator.includePhysical" = "Also process attached physical devices";
+"android.emulator.includePhysicalHelp" = "Off by default. The certificate install rewrites the device's system trust store, which is a real change to a real device.";
+"android.emulator.proxyAddress" = "Proxy address";
+"android.emulator.proxyAddressValue" = "%@:%lld  ·  SOCKS5 %lld";
+"android.emulator.adbMissing" = "adb was not found. Install Android SDK Platform-Tools first.";
+"android.emulator.apkMissing" = "The tunnel APK is not bundled. Build it with Scripts/build-android-vpn.sh to have it installed automatically; the certificate and proxy steps work without it.";
+"android.emulator.advancedMode" = "Advanced Mode";
+"android.emulator.playAVDs" = "Google Play AVDs";
+"android.emulator.magiskToggle" = "Support Google Play AVDs with Magisk";
+"android.emulator.magiskIntro" = "For a Google Play AVD, keep Magisk support enabled and read the following before consenting; ProxyMaxx does not silently root an emulator.";
+"android.emulator.magiskConsent" = "Enabling this lets the setup patch a **temporary copy** of the AVD's ramdisk with bundled Magisk 30.7 (GPLv3), cold-start that AVD, and authorize **only** Android's ADB Shell UID (2000) from a one-shot boot service. The installed SDK image and the AVD configuration are left untouched, and the whole thing is undone by Revert. Root may affect Play Integrity, CTS and Google apps, so do not sign in with personal accounts in a rooted emulator.";
+"android.emulator.revert" = "Revert";
+"android.emulator.install" = "Install";
+"android.emulator.revertAll" = "Revert All Changes";
+"android.emulator.showCommand" = "Show Command";
+"android.emulator.noAdminPrompt" = "No administrator prompt needed";
+"android.emulator.manualTitle" = "Script failed? Run it yourself";
+"android.emulator.manualHint" = "Run this in Terminal. It does exactly what Install does, and prints the same output.";
+"android.emulator.resourcesMissing" = "The Android resources are not present in this build. Rebuild with Scripts/bundle-app.sh.";
+"android.emulator.output" = "Output";
+"android.emulator.noOutput" = "Nothing yet. Press Install.";
+
+/* MARK: Android physical-device guide */
+"android.device.title" = "Android Setup Guide";
+"android.device.intro" = "Capture a physical Android device's traffic by pointing it at this Mac over the local network and trusting the ProxyMaxx certificate on it. Two things are needed: the proxy setting, and trust.";
+"android.device.step1" = "1. Point the device at this Mac";
+"android.device.step1Hint" = "The device must be on the same Wi-Fi network, and reachable at:";
+"android.device.lanPlaceholder" = "<this Mac's LAN address>";
+"android.device.step1Instructions" = "Set it in the device's Wi-Fi settings → Modify network → Advanced → Proxy → Manual. Use the address above for the hostname and port.";
+"android.device.noLAN" = "No LAN address was detected. Connect this Mac to Wi-Fi, or use the Android emulator guide instead.";
+"android.device.step2" = "2. Trust the certificate";
+"android.device.step2Body" = "Export the CA and install it on the device. **Apps only see a certificate that is in the system store**, so also check the app's own network-security configuration: since Android 7 an app ignores user-installed CAs unless it opts in.";
+"android.device.rootNote" = "Installing into the system store requires a rooted device or a modified boot image. For an emulator, use the Android Emulator guide, which does all of this automatically.";
+"android.device.summary" = "Capture Android device traffic by configuring Wi-Fi proxy settings and handling user or system trust depending on the Android version.";
+
+/* MARK: Android install modes */
+"android.mode.automatic.title" = "Automatic";
+"android.mode.googleAPIs.title" = "Google APIs (adb root)";
+"android.mode.manual.title" = "Manual command";
+"android.mode.revert.title" = "Revert all changes";
+"android.mode.automatic.explanation" = "Uses adb root on a Google APIs image. On a Google Play AVD, where adb root is unavailable, it offers the bundled Magisk route instead — but only with your consent.";
+"android.mode.googleAPIs.explanation" = "Only the adb root path. Nothing is patched, and an AVD whose adbd cannot be rooted is reported rather than modified.";
+"android.mode.manual.explanation" = "Neither the app nor your device is touched. The exact command is shown so you can run it in Terminal yourself.";
+"android.mode.revert.explanation" = "Clears the HTTP proxy, removes the tunnel app, and — if this app created a temporary Magisk session — restarts that AVD on its stock ramdisk.";
+
+/* MARK: Menus */
+"menu.about" = "About ProxyMaxx";
+"menu.clearSession" = "Clear Session";
+"menu.mapLocal" = "Map Local…";
+"menu.androidEmulator" = "Open Android Emulator Guide";
+"menu.androidDevice" = "Open Android Device Guide";
+"menu.installBrowserExtension" = "Install Browser Extension…";
+"menu.commandLineTool" = "Command Line Tool…";
+
+/* MARK: Companion panels */
+"browser.panel.title" = "Browser Extension";
+"browser.panel.intro" = "The extension is staged in this folder so the browser can load it. Browsers do not allow an app to install an extension for you.";
+"browser.panel.hosts" = "Native host installed for %@.";
+"browser.panel.noBrowser" = "No Chromium browser profile was found. Open the browser once, then install again to write its host manifest.";
+"browser.panel.steps" = "To finish, open chrome://extensions, turn on Developer mode, choose Load unpacked, and select the folder above. If the extension is already loaded, press Reload on its card.";
+"cli.panel.title" = "Command Line Tool";
+"cli.panel.intro" = "The command line tool is bundled with the app. Run it from Terminal, or link it into your PATH.";
+"cli.panel.note" = "It drives the same engine and reads the same session as this window.";
+"cli.panel.missing" = "This build did not include the tool. Run Scripts/build-cli.sh, then rebuild the app.";
+"companion.copyPath" = "Copy Path";
+"companion.openInFinder" = "Open in Finder";
+
+/* MARK: Errors and notices */
+"error.invalidPort" = "%lld is not a valid port number.";
+"error.portInUse" = "Port %lld is already in use — another proxy such as ProxyMaxx may be running. Choose a different port in Settings.";
+"error.trustBeforeSystemProxy" = "Install and trust the root certificate first. Enabling the system proxy without it makes every HTTPS connection on this Mac fail.";
+"error.bridgeMissing" = "Could not locate the browser bridge binary.";
+"error.bridgeNotAt" = "The browser bridge binary is not at %@. Build it with `swift build`.";
+"error.bridgeNotExecutable" = "The browser bridge binary at %@ is not executable.";
+"error.extensionNotBuilt" = "The browser extension has not been built. Run Scripts/build-browser-extension.sh first.";
+"error.startForCA" = "Start the proxy first to generate the CA";
+"error.startForCert" = "Start the proxy first to load the root certificate";
+"error.authoriseTrust" = "Authorise ProxyMaxx to trust its root certificate";
+"error.authoriseRemove" = "Authorise ProxyMaxx to remove its root certificate";
+"error.portHeld" = "The other engine did not release 127.0.0.1:%lld. Stop it and press Start.";
+"error.adbMissing" = "adb was not found. Install Android SDK Platform-Tools, then try again.";
+"error.noDevice" = "No device or emulator is connected.";
+"error.startForCertShort" = "Start the proxy first, so the root certificate exists.";
+"error.runInTerminal" = "Run this in Terminal:";
+"error.revertingOn" = "Reverting on %@…";
+"error.installingOn" = "Installing on %@ (proxy %@:%lld, SOCKS %lld)…";
+"error.playAVDNotice" = "If this AVD runs a Google Play image, setup roots it with Magisk for this boot. That uses the Magisk support you enabled.";
+"error.finished" = "✅ Finished.";
+"error.failed" = "❌ %@";
+"error.androidResourcesMissing" = "The Android resources are missing from this build. Rebuild with Scripts/bundle-app.sh, or set PROXYMAXX_RESOURCES.";
+"error.androidScriptMissing" = "The Android installer script was not found at %@.";
+"error.magiskAssetsMissing" = "PM-MAGISK-RESOURCE-001: the bundled Magisk assets are missing at %@.";
+"error.setupScriptFailed" = "The setup script exited with status %lld. Review the log above.";

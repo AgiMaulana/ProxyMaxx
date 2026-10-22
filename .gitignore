@@ -1,0 +1,63 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.swift-version
+
+# Build output
+dist/
+build/
+*.app
+
+# Companion artifacts staged into Resources/ by Scripts/bundle-app.sh. They are rebuilt
+# on every bundle, so a tracked copy could only ever drift. Vendored inputs such as
+# Resources/android/Magisk/ stay tracked: they are not ours to rebuild.
+Resources/proxymaxx-cli
+Resources/proxymaxx-cli.new
+Resources/browser/proxymaxx-extension/
+Resources/android/proxymaxx-vpn.apk
+
+# Android / Gradle
+Android/**/build/
+Android/**/.gradle/
+Android/**/.kotlin/
+Android/**/captures/
+Android/**/.cxx/
+Android/**/.externalNativeBuild/
+Android/**/local.properties
+.idea/
+*.iml
+
+# Android signing
+*.jks
+*.keystore
+keystore.properties
+
+# Logs / crash reports
+*.log
+crash.log
+*.ips
+*.crash
+core.*
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.p12
+
+# Editor / tooling
+.vscode/
+.CLAUDE*
+.codex/
+.commandcode/

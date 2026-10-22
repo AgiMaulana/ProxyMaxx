@@ -1,0 +1,197 @@
+name: Release
+
+# A vX.Y.Z tag is the release trigger: publishing a GitHub release creates it, and so
+# does pushing a tag by hand.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+# A re-pushed tag must not race an in-flight run for the same version.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build release bundle
+    # The app is SwiftUI, so the runner has to be macOS. macos-15 ships Xcode 16, which
+    # covers the package's swift-tools-version 5.10 and the macOS 14 deployment target.
+    runs-on: macos-15
+    steps:
+      # fetch-depth: 0 so git-cliff can read the full history for release notes.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # The default `packages` value still asks for the deprecated `tools` package,
+      # which Google no longer serves. Pinning platform-tools and the compileSdk platform
+      # is enough: build-tools is left to AGP, which installs the version it wants.
+      # The list is space-separated; commas make sdkmanager look for one literal package.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION}"
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "Tag ${GITHUB_REF_NAME} -> versionName ${VERSION}, versionCode ${VERSION_CODE}"
+
+      # The keystore is gitignored, so it travels as base64 and is decoded outside the
+      # checkout. STORE_FILE is what app/build.gradle.kts looks for: without it Gradle
+      # emits an unsigned APK, so a missing secret degrades instead of failing the run.
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" ]]; then
+            echo "::warning::KEYSTORE_BASE64 is not set — the tunnel APK will be unsigned and emulator-only."
+            exit 0
+          fi
+          KEYSTORE_PATH="$RUNNER_TEMP/release-keystore.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -D > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      # One script builds every companion and the bundle, so CI and a developer's
+      # machine cannot drift in what a release contains.
+      - name: Build app and companions
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: Scripts/build-all.sh release
+
+      - name: Verify the bundled APK signature
+        if: env.STORE_FILE != ''
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)"
+          "$APKSIGNER" verify --print-certs \
+            dist/ProxyMaxx.app/Contents/Resources/Android/proxymaxx-vpn.apk
+
+      # The bundle inherits the version from Scripts/Info.plist, so stamp the tag in
+      # afterwards. Re-sign because editing Info.plist changes the sealed resources.
+      - name: Stamp version into the bundle
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          PLIST="dist/ProxyMaxx.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_NAME" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION_CODE" "$PLIST"
+          codesign --force --deep --sign - dist/ProxyMaxx.app
+
+      # A DMG is what a macOS user expects: mount it, drag the app to Applications.
+      # The staging folder carries an /Applications symlink so the drag target is the
+      # one they already have. ditto, not cp, because it preserves the signature.
+      - name: Create installable DMG
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          STAGING="$RUNNER_TEMP/dmg"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          ditto dist/ProxyMaxx.app "$STAGING/ProxyMaxx.app"
+          ln -s /Applications "$STAGING/Applications"
+          mkdir -p dist/release
+          hdiutil create \
+            -volname "ProxyMaxx ${VERSION_NAME}" \
+            -srcfolder "$STAGING" \
+            -format UDZO \
+            -ov \
+            "dist/release/ProxyMaxx-${TAG}.dmg"
+          hdiutil verify "dist/release/ProxyMaxx-${TAG}.dmg"
+          ls -lh dist/release
+
+      # Mount the finished image and check the copy inside it, so a DMG that lost the
+      # signature in transit fails here rather than on a user's Mac.
+      - name: Verify the app inside the DMG
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          MOUNT="$RUNNER_TEMP/mnt"
+          mkdir -p "$MOUNT"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "dist/release/ProxyMaxx-${TAG}.dmg"
+          codesign --verify --deep --strict "$MOUNT/ProxyMaxx.app"
+          hdiutil detach "$MOUNT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dmg
+          path: dist/release/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dmg
+          path: dist
+
+      - name: Generate release notes from commits
+        id: git-cliff
+        continue-on-error: true
+        uses: orhun/git-cliff-action@v4
+        with:
+          args: -vv --latest --strip header
+        env:
+          OUTPUT: CHANGES.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      # Ad-hoc signing is enough to run locally but not to satisfy Gatekeeper for a
+      # downloaded app, so the release notes carry the one command that fixes it.
+      - name: Append install notes
+        run: |
+          if [[ -s CHANGES.md ]]; then
+            {
+              printf '\n## Install\n\n'
+              printf 'Open the DMG, drag **ProxyMaxx** to Applications, then launch it.\n\n'
+              printf 'The app is ad-hoc signed, so macOS quarantines it after download. Clear that once:\n\n'
+              printf '```sh\nxattr -dr com.apple.quarantine "/Applications/ProxyMaxx.app"\n```\n'
+            } >> CHANGES.md
+          fi
+
+      # Idempotent: a fresh tag creates the release; a re-run re-uploads the assets.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="--generate-notes"
+          if [[ -s CHANGES.md ]]; then NOTES="--notes-file CHANGES.md"; fi
+          if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists — uploading assets"
+            gh release upload "${GITHUB_REF_NAME}" dist/*.dmg --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/*.dmg \
+              --title "ProxyMaxx ${GITHUB_REF_NAME}" \
+              $NOTES
+          fi

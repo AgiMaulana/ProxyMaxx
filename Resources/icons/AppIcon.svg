@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ProxyMaxx app icon. Rendered to PNG/.icns by rasterize.py, and mirrored by the
+  Android adaptive icon (app/src/main/res/drawable/ic_launcher_background.xml and
+  ic_launcher_foreground.xml). 1024 unit artwork box, 824 squircle, corner radius 185.
+  Decisions and reasons for this mark: see DESIGN.md.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">ProxyMaxx</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366F1" />
+      <stop offset="0.55" stop-color="#6D5CF2" />
+      <stop offset="1" stop-color="#7C3AED" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.08" cy="0.95" r="0.85">
+      <stop offset="0" stop-color="#06B6D4"
+        stop-opacity="0.36" />
+      <stop offset="0.6" stop-color="#06B6D4"
+        stop-opacity="0.09" />
+      <stop offset="1" stop-color="#06B6D4"
+        stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sheen" cx="0.22" cy="0.06" r="0.62">
+      <stop offset="0" stop-color="#FFFFFF"
+        stop-opacity="0.18" />
+      <stop offset="1" stop-color="#FFFFFF"
+        stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="vignette" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.6" stop-color="#1E1B4B"
+        stop-opacity="0" />
+      <stop offset="1" stop-color="#1E1B4B"
+        stop-opacity="0.22" />
+    </linearGradient>
+    <clipPath id="squircle">
+      <path d="M 739.00 100.00 C 752.76 100.17 803.08 100.33 821.58 100.99 C 840.09 101.66 841.92 102.65 850.03 103.99 C 858.14 105.34 864.27 107.00 870.24 109.05 C 876.21 111.10 881.19 113.48 885.84 116.29 C 890.48 119.09 894.48 122.23 898.12 125.88 C 901.77 129.52 904.91 133.52 907.71 138.16 C 910.52 142.81 912.90 147.79 914.95 153.76 C 917.00 159.73 918.66 165.86 920.01 173.97 C 921.35 182.08 922.34 183.91 923.01 202.42 C 923.67 220.92 923.83 271.24 924.00 285.00 C 923.83 752.76 923.67 803.08 923.01 821.58 C 922.34 840.09 921.35 841.92 920.01 850.03 C 918.66 858.14 917.00 864.27 914.95 870.24 C 912.90 876.21 910.52 881.19 907.71 885.84 C 904.91 890.48 901.77 894.48 898.12 898.12 C 894.48 901.77 890.48 904.91 885.84 907.71 C 881.19 910.52 876.21 912.90 870.24 914.95 C 864.27 917.00 858.14 918.66 850.03 920.01 C 841.92 921.35 840.09 922.34 821.58 923.01 C 803.08 923.67 752.76 923.83 739.00 924.00 C 271.24 923.83 220.92 923.67 202.42 923.01 C 183.91 922.34 182.08 921.35 173.97 920.01 C 165.86 918.66 159.73 917.00 153.76 914.95 C 147.79 912.90 142.81 910.52 138.16 907.71 C 133.52 904.91 129.52 901.77 125.88 898.12 C 122.23 894.48 119.09 890.48 116.29 885.84 C 113.48 881.19 111.10 876.21 109.05 870.24 C 107.00 864.27 105.34 858.14 103.99 850.03 C 102.65 841.92 101.66 840.09 100.99 821.58 C 100.33 803.08 100.17 752.76 100.00 739.00 C 100.17 271.24 100.33 220.92 100.99 202.42 C 101.66 183.91 102.65 182.08 103.99 173.97 C 105.34 165.86 107.00 159.73 109.05 153.76 C 111.10 147.79 113.48 142.81 116.29 138.16 C 119.09 133.52 122.23 129.52 125.88 125.88 C 129.52 122.23 133.52 119.09 138.16 116.29 C 142.81 113.48 147.79 111.10 153.76 109.05 C 159.73 107.00 165.86 105.34 173.97 103.99 C 182.08 102.65 183.91 101.66 202.42 100.99 C 220.92 100.33 271.24 100.17 285.00 100.00 Z" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)" />
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#glow)" />
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)" />
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#vignette)" />
+  </g>
+
+  <g transform="translate(512 512) scale(1.05) translate(-512 -512)"
+     fill="none" stroke="#FFFFFF" stroke-width="84"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 312 404 L 656 404" />
+    <path d="M 592 312 L 672 404" />
+    <path d="M 672 404 L 592 496" />
+    <path d="M 712 620 L 368 620" />
+    <path d="M 432 712 L 352 620" />
+    <path d="M 352 620 L 432 528" />
+  </g>
+</svg>

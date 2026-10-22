@@ -1,0 +1,13 @@
+on property:sys.boot_completed=1
+    start proxymaxx_magisk_bootstrap
+
+# This one-shot service runs in Magisk's root domain before ProxyMaxx asks for its first
+# shell. It grants Android's ADB Shell UID only — never every app — because the first `su`
+# call cannot authorize itself and would otherwise open Magisk's own Superuser prompt.
+service proxymaxx_magisk_bootstrap ${MAGISKTMP}/proxymaxx_magisk_bootstrap.sh
+    class late_start
+    user root
+    group root shell
+    seclabel u:r:magisk:s0
+    disabled
+    oneshot

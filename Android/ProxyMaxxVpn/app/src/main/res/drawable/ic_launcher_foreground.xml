@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Foreground layer of the adaptive launcher icon: two opposing flow arrows
+    (request out, response back), the glyph from Resources/icons/AppIcon.svg.
+
+    The paths are authored in that 1024-unit artwork space; the group scales them
+    into the 66dp safe circle of the 108dp adaptive layer, so the arrow tips are
+    never clipped by a launcher mask. Stroke width scales with the group.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="0.0965"
+        android:scaleY="0.0965"
+        android:translateX="4.6"
+        android:translateY="4.6">
+        <path
+            android:pathData="M312,404 L656,404"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="84"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M592,312 L672,404 L592,496"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="84"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M712,620 L368,620"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="84"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M432,712 L352,620 L432,528"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="84"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+
+</vector>

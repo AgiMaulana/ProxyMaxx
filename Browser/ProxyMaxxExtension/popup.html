@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+  <title>ProxyMaxx</title>
+</head>
+<body>
+  <header>
+    <h1>ProxyMaxx <span id="version" class="version">v1.0.5</span></h1>
+    <span id="app-state" class="chip">Checking…</span>
+  </header>
+
+  <!--
+    Visible until popup.js hides it. If this text is on screen, the script never ran or
+    stopped early, which is otherwise indistinguishable from a worker that never answered.
+    The version above is likewise static, so it proves which files the browser loaded even
+    when no script executes.
+  -->
+  <p id="boot" class="boot">The popup script did not run.</p>
+
+  <button id="capture" class="capture" type="button" aria-pressed="false">
+    <span class="capture-label">Capture this browser</span>
+    <span id="capture-detail" class="capture-detail"></span>
+  </button>
+
+  <dl class="facts">
+    <div><dt>Proxy setting</dt><dd id="fact-mode">—</dd></div>
+    <div><dt>Controlled by</dt><dd id="fact-control">—</dd></div>
+    <div><dt>App</dt><dd id="fact-app">—</dd></div>
+    <div><dt>HTTPS decryption</dt><dd id="fact-ca">—</dd></div>
+  </dl>
+
+  <div class="options">
+    <label class="check">
+      <input id="opt-localhost" type="checkbox">
+      <span>Capture localhost</span>
+    </label>
+    <label class="port">
+      <span>Port</span>
+      <input id="opt-port" type="number" min="1" max="65535" inputmode="numeric">
+    </label>
+  </div>
+
+  <p id="error" class="error" hidden></p>
+
+  <section class="checks">
+    <h2>What still stops capture</h2>
+    <ul id="checks"></ul>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

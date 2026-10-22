@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Background layer of the adaptive launcher icon: the indigo to violet gradient
+    with its cyan accent glow, top-left sheen and lower vignette. Mirrors the
+    gradient stack in Resources/icons/AppIcon.svg.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- base gradient -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108">
+                <item android:offset="0.0" android:color="#FF6366F1" />
+                <item android:offset="0.55" android:color="#FF6D5CF2" />
+                <item android:offset="1.0" android:color="#FF7C3AED" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- cyan accent glow, bottom-left -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="8.64"
+                android:centerY="102.6"
+                android:gradientRadius="91.8">
+                <item android:offset="0.0" android:color="#5C06B6D4" />
+                <item android:offset="0.6" android:color="#1706B6D4" />
+                <item android:offset="1.0" android:color="#0006B6D4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- top-left sheen -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="23.76"
+                android:centerY="6.48"
+                android:gradientRadius="66.96">
+                <item android:offset="0.0" android:color="#2EFFFFFF" />
+                <item android:offset="1.0" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- lower vignette -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="0"
+                android:endY="108">
+                <item android:offset="0.6" android:color="#001E1B4B" />
+                <item android:offset="1.0" android:color="#381E1B4B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>
