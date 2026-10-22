@@ -262,6 +262,9 @@ jobs:
             exit 0
           fi
           git commit -m "proxymaxx ${VERSION}"
+          # Git over HTTPS wants HTTP Basic, not `bearer`. A Bearer header is accepted by the
+          # REST API but the receive-pack endpoint answers 401, which leaves git one credential
+          # prompt away from `could not read Username`. `tr` strips the newline GNU base64 wraps.
+          CREDENTIAL="$(printf 'x-access-token:%s' "${TAP_GITHUB_TOKEN}" | base64 | tr -d '\n')"
           # The token travels in a header, never in the remote URL, so it cannot reach the log.
-          git -c http.extraheader="AUTHORIZATION: bearer ${TAP_GITHUB_TOKEN}" \
-            push origin HEAD:main
+          git -c "http.extraheader=AUTHORIZATION: Basic ${CREDENTIAL}" push origin HEAD:main
