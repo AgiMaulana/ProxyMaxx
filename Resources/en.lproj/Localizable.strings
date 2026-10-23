@@ -83,6 +83,8 @@
 "main.socksSuffix" = ", socks %lld";
 "main.hostHereInstead" = "Host here instead";
 "main.systemProxyStale" = "The system proxy still points at 127.0.0.1:%lld and nothing is listening there, so networking will fail until it is cleared.";
+"main.trustCertificateRequired" = "The root certificate is not trusted yet. Until it is, macOS rejects every HTTPS connection this proxy decrypts, so the System Proxy stays off. Open Certificates and press Install & Trust Certificate, then turn the System Proxy on.";
+"main.trustCertificateAction" = "Open Certificates";
 "main.filterPlaceholder" = "Filter by host, path, method or status";
 "main.errorsOnly" = "Errors only";
 "main.mapResponse" = "Map Response to Map Local…";
@@ -300,7 +302,6 @@
 /* MARK: Errors and notices */
 "error.invalidPort" = "%lld is not a valid port number.";
 "error.portInUse" = "Port %lld is already in use — another proxy such as ProxyMaxx may be running. Choose a different port in Settings.";
-"error.trustBeforeSystemProxy" = "Install and trust the root certificate first. Enabling the system proxy without it makes every HTTPS connection on this Mac fail.";
 "error.bridgeMissing" = "Could not locate the browser bridge binary.";
 "error.bridgeNotAt" = "The browser bridge binary is not at %@. Build it with `swift build`.";
 "error.bridgeNotExecutable" = "The browser bridge binary at %@ is not executable.";

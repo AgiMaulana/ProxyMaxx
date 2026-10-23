@@ -32,6 +32,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var boundSocksPort: Int?
     @Published private(set) var systemProxyEnabled = false
     @Published private(set) var certificateInstalled = false
+    /// Set when a System Proxy request was refused for want of a trusted root certificate.
+    /// The window turns this into a banner that names the cause and opens the Certificates
+    /// pane, so the refusal leads somewhere instead of ending in an alert.
+    @Published private(set) var trustCertificateRequired = false
     /// True when the system proxy still points here from a run that did not exit cleanly.
     @Published private(set) var staleSystemProxy = false
     /// Confirm certificate changes with Touch ID. Optional: no authorization is actually
@@ -296,9 +300,11 @@ final class AppModel: ObservableObject {
     func setSystemProxy(_ enabled: Bool) {
         if enabled, !certificateInstalled {
             systemProxyEnabled = false
-            lastError = L10n.string("error.trustBeforeSystemProxy")
+            trustCertificateRequired = true
+            log("System proxy not enabled: the root certificate is not trusted")
             return
         }
+        trustCertificateRequired = false
         // Point the system at whichever engine is actually listening — ours, or the CLI
         // we attached to — so the toggle is honest in both modes.
         let port = activeProxyPort
@@ -511,6 +517,7 @@ final class AppModel: ObservableObject {
                 switch outcome {
                 case .success:
                     self.certificateInstalled = true
+                    self.trustCertificateRequired = false
                     self.log("Root certificate installed and trusted")
                     self.publishBrowserBridgeState()
                 case .cancelled:
