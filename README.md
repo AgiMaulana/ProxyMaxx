@@ -1,21 +1,23 @@
-<img src="docs/cover.png" alt="ProxyMaxx cover banner: HTTP/HTTPS debugging proxy for macOS, free and MIT licensed on Homebrew" width="100%">
+<img src="docs/cover.png" alt="ProxyMaxx cover banner: HTTP/HTTPS debugging proxy for macOS, source available and free for internal use" width="100%">
 
 # ProxyMaxx
 
-**A free, open-source HTTP/HTTPS debugging proxy for macOS.** ProxyMaxx sits between an app
-or a device and the network, decrypts TLS, and shows you the decrypted traffic: headers,
-bodies, timings and WebSocket frames. It is the MIT-licensed alternative to Charles Proxy,
-Proxyman and mitmproxy for people who want a native Swift app with no licence key, no paid
-tier and no account. macOS 14 or later, built with SwiftPM.
+**A source-available HTTP/HTTPS debugging proxy for macOS, free for internal use.** ProxyMaxx
+sits between an app or a device and the network, decrypts TLS, and shows you the decrypted
+traffic: headers, bodies, timings and WebSocket frames. It is the source-available alternative
+to Charles Proxy, Proxyman and mitmproxy for people who want a native Swift app with no licence
+key, no trial and no account. macOS 14 or later, built with SwiftPM.
 
-Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in this repository.
+Every feature ProxyMaxx ships is in this repository, and every release you build or run for
+your own development is free. See [Commercial licensing](#commercial-licensing).
 
 ![The ProxyMaxx window on macOS, showing the live traffic table, the method and status filter bar, and the flow inspector below](docs/screenshots/mac-app-proxy-served-on-the-app.png)
 
 ## Why ProxyMaxx
 
-- **Free and open source.** MIT licence. No licence key, no trial, no subscription, no
-  telemetry.
+- **Free for internal use.** No licence key, no trial, no subscription, no telemetry.
+  Commercial embedding or hosted use needs a commercial licence; see
+  [Commercial licensing](#commercial-licensing).
 - **Native macOS app, not a Java or Qt wrapper.** SwiftUI front end on a SwiftNIO proxy
   engine, so it starts fast and looks like a Mac app.
 - **HTTPS interception without a privileged helper.** The root CA goes into the user trust
@@ -30,7 +32,7 @@ Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in thi
 | | ProxyMaxx | Charles Proxy | Proxyman | mitmproxy |
 |---|---|---|---|---|
 | Price | Free | Paid licence | Free tier + paid | Free |
-| Licence | MIT | Proprietary | Proprietary | MIT |
+| Licence | Community Source 2.0 | Proprietary | Proprietary | MIT |
 | Native macOS UI | Yes | Java | Yes | No (TUI or web) |
 | HTTPS MITM | Yes | Yes | Yes | Yes |
 | macOS only | Yes | No | Yes | No |
@@ -368,6 +370,39 @@ Two NIO details this design depends on, both covered by tests:
 Issues and pull requests are welcome. Run `swift test` before sending a change; it includes
 the end-to-end tests that drive the proxy with real `curl`.
 
+## Commercial licensing
+
+ProxyMaxx is source available, not open source. The [ProxyMaxx Community Source
+License](LICENSE) grants four things, and the boundary between them matters:
+
+- **Internal use is free.** You and your company may run, study, modify and build ProxyMaxx
+  for your own development, testing, debugging and internal operations, including at a
+  commercial company. Using ProxyMaxx to debug or test an app you build — even for a paying
+  client — is internal use and costs nothing.
+- **Products and hosted services need a commercial licence.** A separate written agreement is
+  required if ProxyMaxx code is embedded in a product you offer to others, or runs as part of
+  a hosted or SaaS service, even when your customers never receive a copy of the Software.
+- **Royalties are negotiated.** No rate is set by the community licence. Each commercial
+  agreement fixes its royalty rate, revenue base, reporting, payment and audit terms in
+  writing.
+- **Share patches, not forks.** You may publish patches and diffs. You may not publish or
+  distribute a complete modified fork under the community licence, and you may not split a
+  fork into pieces to get around that.
+
+The trigger is whether the Software's functionality reaches a third party, not whether
+ProxyMaxx helped you build something. A CI pipeline that runs ProxyMaxx to build or test your
+own product is internal use, even if the resulting artifacts are delivered to a client.
+
+To start a commercial agreement, open an issue in this repository or use the contact channel
+listed there. The licence also includes a checklist of the terms such an agreement must
+cover.
+
+**Prior versions.** Everything released under the MIT License, including tag `v0.1.0`,
+remains under MIT for the copies obtained while that licence applied. MIT grants cannot be
+withdrawn. The community source licence governs version 2.0 and later.
+
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+ProxyMaxx Community Source License 2.0. See [LICENSE](LICENSE). The bundled Android assets
+under `Resources/android/Magisk/` are unmodified Magisk artifacts under GPLv3 and are covered
+by that licence, not this one.

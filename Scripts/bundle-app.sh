@@ -48,6 +48,13 @@ cp "$BIN_PATH/ProxyMaxxApp" "$APP/Contents/MacOS/ProxyMaxx"
 cp "$ROOT/Scripts/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# The licence must travel with every copy: section 5.1 requires the notices and the licence
+# text to accompany copies, and the ad-hoc DMG is distributed with nothing else attached.
+cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE"
+if [[ -f "$ROOT/Resources/android/Magisk/v30.7/LICENSE" ]]; then
+    cp "$ROOT/Resources/android/Magisk/v30.7/LICENSE" "$APP/Contents/Resources/LICENSE-Magisk-GPLv3"
+fi
+
 # The app icon. CFBundleIconFile in Info.plist names AppIcon.icns, so it must sit
 # directly in Contents/Resources.
 echo "==> Copying app icon"

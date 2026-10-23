@@ -111,6 +111,7 @@ jobs:
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
           ditto dist/ProxyMaxx.app "$STAGING/ProxyMaxx.app"
+          ditto LICENSE "$STAGING/ProxyMaxx Community Source License.txt"
           ln -s /Applications "$STAGING/Applications"
           mkdir -p dist/release
           hdiutil create \
