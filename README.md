@@ -1,3 +1,5 @@
+<img src="docs/cover.png" alt="ProxyMaxx: HTTP/HTTPS debugging proxy for macOS. Intercept, decrypt TLS, inspect WebSockets, Map Local. Free, MIT licensed, native Swift, on Homebrew." width="100%">
+
 # ProxyMaxx
 
 **A free, open-source HTTP/HTTPS debugging proxy for macOS.** ProxyMaxx sits between an app
