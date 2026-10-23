@@ -32,7 +32,7 @@ your own development is free. See [Commercial licensing](#commercial-licensing).
 | | ProxyMaxx | Charles Proxy | Proxyman | mitmproxy |
 |---|---|---|---|---|
 | Price | Free | Paid licence | Free tier + paid | Free |
-| Licence | Source available | Proprietary | Proprietary | MIT |
+| Licence | Community Source 2.0 | Proprietary | Proprietary | MIT |
 | Native macOS UI | Yes | Java | Yes | No (TUI or web) |
 | HTTPS MITM | Yes | Yes | Yes | Yes |
 | macOS only | Yes | No | Yes | No |
