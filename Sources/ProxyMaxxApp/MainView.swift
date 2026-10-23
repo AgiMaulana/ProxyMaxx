@@ -23,6 +23,7 @@ struct MainView: View {
             controlBar(flows: flows)
             if let owner = model.externalOwner { externalOwnerBanner(owner) }
             if model.staleSystemProxy { staleProxyBanner }
+            if trustCertificateBanner { certificateTrustBanner }
             Divider()
             filterBar
             Divider()
@@ -273,6 +274,33 @@ struct MainView: View {
                 .font(.callout)
             Spacer()
             Button("common.restore") { model.restoreSystemProxy() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.16))
+    }
+
+    /// True when a System Proxy request was refused for want of a trusted root certificate,
+    /// and it still is. Deriving the second half from `certificateInstalled` clears the
+    /// banner the moment the certificate is trusted, however it was trusted.
+    private var trustCertificateBanner: Bool {
+        model.trustCertificateRequired && !model.certificateInstalled
+    }
+
+    /// Shown when the System Proxy was refused because the root certificate is not trusted.
+    ///
+    /// The toggle cannot do what was asked until a second step happens elsewhere in the
+    /// app, so the refusal carries that step as a button rather than an alert that only
+    /// reports failure. The seal mark is the one the toolbar's Certificates button uses,
+    /// so the banner and its destination read as the same place.
+    private var certificateTrustBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.seal").foregroundStyle(.orange)
+            Text(L10n.string("main.trustCertificateRequired"))
+                .font(.callout)
+            Spacer()
+            Button("main.trustCertificateAction") { showCertificates = true }
                 .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, 12)
