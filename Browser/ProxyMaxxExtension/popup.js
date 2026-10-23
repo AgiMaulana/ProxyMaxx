@@ -35,6 +35,7 @@ const elements = {
   localhost: document.getElementById("opt-localhost"),
   port: document.getElementById("opt-port"),
   error: document.getElementById("error"),
+  retry: document.getElementById("retry"),
   checks: document.getElementById("checks"),
 };
 
@@ -45,16 +46,30 @@ const CONTROL_LABELS = {
   not_controllable: "a policy or the command line",
 };
 
+/// How to describe where the port in use came from, so a number nothing can account for is
+/// never presented as though it had been read from the app.
+const PORT_ORIGINS = {
+  app: "the port the app reported",
+  last: "the port the app last reported",
+  manual: "the port you set",
+};
+
 function check(verdict, state, text) {
   return { verdict, state, text };
 }
+
+/// The one thing a person can do about a bridge that is not answering, named in the panel
+/// because the failure is otherwise invisible: nothing about the browser or the extension
+/// looks wrong.
+const BRIDGE_FIX =
+  "Open ProxyMaxx and press Install Browser Extension…, then press Reload on this extension's card in chrome://extensions.";
 
 function buildChecks(status) {
   const { mode, levelOfControl, app, captureLocalhost } = status;
   const connected = app.connected;
   const state = connected ? app.state : null;
   const checks = [];
-  const port = status.effectivePort ?? status.port;
+  const port = status.effectivePort;
 
   checks.push(
     mode === "fixed_servers"
@@ -74,9 +89,9 @@ function buildChecks(status) {
 
   // Only ever claim what the app actually told us. "Cannot be reached" and "nothing is
   // listening" are different states, and the difference is the whole diagnosis.
-  if (status.weOwnProxy && !connected) {
+  if (status.weOwnProxy && !connected && port !== null) {
     checks.push(
-      check("Unverified", "warn", `Capture is on, and the app cannot be reached to confirm anything accepts connections on 127.0.0.1:${port}. If pages fail to load, turn capture off.`)
+      check("Unverified", "warn", `Capture is on at 127.0.0.1:${port}, ${PORT_ORIGINS[status.portSource] ?? "a remembered port"}, but the app is not answering now to confirm anything is listening there. If pages fail to load, turn capture off.`)
     );
   } else if (status.weOwnProxy && connected && state.proxyListening === false) {
     checks.push(
@@ -90,14 +105,28 @@ function buildChecks(status) {
 
   // Worth stating plainly, because it is the failure that looks like a broken extension: a
   // stored port that no longer matches where the app actually listens.
-  if (connected && status.effectivePort !== status.port) {
+  if (connected && status.port !== null && status.effectivePort !== status.port) {
     checks.push(
       check("App's port", "muted", `The app listens on ${state.httpPort}, so the browser is pointed there. The port field above is only the fallback for when the app cannot be asked.`)
     );
   }
 
+  // Capture outliving the bridge is only safe because the port was read once and kept.
+  // Saying so is the difference between a diagnosis and a guess.
+  if (status.weOwnProxy && status.portSource === "last") {
+    checks.push(
+      check("Remembered", "muted", `The app is not answering, so the browser is still pointed at ${status.effectivePort}, the last port it reported.`)
+    );
+  }
+
+  if (status.weOwnProxy && port === null) {
+    checks.push(
+      check("No port", "warn", `Capture has no confirmed port, so this browser was left on its own settings. ${BRIDGE_FIX}`)
+    );
+  }
+
   if (!connected) {
-    checks.push(check("Unknown", "muted", `The app is not answering: ${app.reason}`));
+    checks.push(check("Bridge", "warn", `The app is not answering: ${app.reason} The port, the CA verdict and the listener check all come over this bridge. ${BRIDGE_FIX}`));
   } else if (state.caTrusted) {
     checks.push(check("Trusted", "ok", "The app's root CA is trusted, so HTTPS can be decrypted."));
   } else {
@@ -149,7 +178,7 @@ function renderChecks(checks) {
 function renderFacts(status) {
   const connected = status.app.connected;
   const state = connected ? status.app.state : null;
-  const port = status.effectivePort ?? status.port;
+  const port = status.effectivePort;
   // An app that is running but not reachable is a different state from one that is down, so
   // the label distinguishes them.
   const reachable = connected;
@@ -167,12 +196,16 @@ function renderFacts(status) {
   elements.ca.textContent = connected ? (state.caTrusted ? "ready" : "root CA not trusted") : "unknown";
 
   elements.localhost.checked = status.captureLocalhost;
-  elements.port.value = String(status.port);
+  // Blank means "whatever the app reports", which is the only honest reading of an empty
+  // field once the value is no longer seeded with a default that can go stale.
+  elements.port.value = status.port === null ? "" : String(status.port);
 
   elements.capture.setAttribute("aria-pressed", String(status.weOwnProxy));
 
   if (!status.weOwnProxy) {
     elements.captureDetail.textContent = "Off — the browser's own proxy settings apply";
+  } else if (port === null) {
+    elements.captureDetail.textContent = "On — no confirmed port";
   } else if (!reachable) {
     elements.captureDetail.textContent = `On — 127.0.0.1:${port}, unconfirmed`;
   } else if (state.proxyListening === false) {
@@ -180,6 +213,10 @@ function renderFacts(status) {
   } else {
     elements.captureDetail.textContent = `On — 127.0.0.1:${port}`;
   }
+
+  // Starting the app and reloading the extension both happen outside this panel, so
+  // re-reading the bridge has to be one click rather than closing and reopening the popup.
+  elements.retry.hidden = connected;
 }
 
 function render(status) {
@@ -213,6 +250,12 @@ function render(status) {
     elements.port.disabled = false;
     elements.error.hidden = true;
     elements.error.title = "";
+  }
+
+  // A refused enable is a message about the action, not a broken extension, so it goes in
+  // the error line without taking the panel down.
+  if (status.enableError) {
+    showError(status.enableError);
   }
 
   if (status.lastProxyError) {
@@ -265,9 +308,17 @@ async function readProxySetting() {
 /// panel can still name the proxy setting and its owner instead of showing nothing.
 async function degradedStatus(reason) {
   const setting = await readProxySetting();
+  const port = await readStored("port", null);
+  const knownPort = await readStored("knownPort", null);
+  const usable = (value) => Number.isInteger(value) && value > 0;
+  // Same ordering the worker uses, so a worker that is merely reloading does not make the
+  // port look like it changed.
+  const effectivePort = usable(knownPort) ? knownPort : (usable(port) ? port : null);
 
   return {
-    port: await readStored("port", 9090),
+    port,
+    effectivePort,
+    portSource: effectivePort === null ? "none" : (usable(knownPort) ? "last" : "manual"),
     captureLocalhost: await readStored("captureLocalhost", false),
     weOwnProxy: await readStored("weOwnProxy", false),
     lastProxyError: await readStored("lastProxyError", null),
@@ -329,6 +380,10 @@ elements.localhost.addEventListener("change", () => {
 
 elements.port.addEventListener("change", () => {
   send("setPort", { value: elements.port.value });
+});
+
+elements.retry.addEventListener("click", () => {
+  send("status");
 });
 
 elements.error.addEventListener("click", () => {

@@ -357,6 +357,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var browserExtensionPath: String?
     @Published private(set) var browserExtensionBrowsers: [String] = []
 
+    /// What the last install's bridge check found. Named in the panel because a bridge that
+    /// does not answer is invisible everywhere else: the browser looks fine and the only
+    /// symptom is a popup that says the app cannot be reached.
+    @Published private(set) var browserBridgeCheck: String?
+
     /// The two companion panels. Held here so the menu can open them, and so a panel stays
     /// readable while the person switches to the browser or Finder.
     @Published var showBrowserExtensionPanel = false
@@ -395,6 +400,7 @@ final class AppModel: ObservableObject {
             lastError = L10n.string("error.bridgeMissing")
             return
         }
+        browserBridgeCheck = nil
 
         let written: [BrowserBridge.InstalledManifest]
         do {
@@ -407,6 +413,18 @@ final class AppModel: ObservableObject {
         browserBridgeManifests = written.map(\.manifest.path)
         browserExtensionBrowsers = written.map(\.browser)
         publishBrowserBridgeState()
+
+        // A manifest that was written is not a channel that answers. Say which of the two
+        // this is now, so a silent bridge is caught here instead of in the popup later.
+        switch BrowserBridge.verifyHost(hostBinary: hostBinary) {
+        case .answered(let port):
+            browserBridgeCheck = port.map { L10n.format("browser.panel.bridgeReady", String($0)) }
+                ?? L10n.string("browser.panel.bridgeIdle")
+            log("Browser bridge verified.")
+        case .failed(let reason):
+            browserBridgeCheck = L10n.format("browser.panel.bridgeBroken", reason)
+            log("Browser bridge check failed: \(reason)")
+        }
 
         let extensionURL: URL
         do {
