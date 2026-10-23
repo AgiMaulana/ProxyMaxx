@@ -1,14 +1,14 @@
-<img src="docs/cover.png" alt="ProxyMaxx: HTTP/HTTPS debugging proxy for macOS. Intercept, decrypt TLS, inspect WebSockets, Map Local. Free, MIT licensed, native Swift, on Homebrew." width="100%">
+<img src="docs/cover.png" alt="ProxyMaxx cover banner: HTTP/HTTPS debugging proxy for macOS, free and MIT licensed on Homebrew" width="100%">
 
 # ProxyMaxx
 
 **A free, open-source HTTP/HTTPS debugging proxy for macOS.** ProxyMaxx sits between an app
-or a device and the network, decrypts TLS, and shows you every request and response: headers,
+or a device and the network, decrypts TLS, and shows you the decrypted traffic: headers,
 bodies, timings and WebSocket frames. It is the MIT-licensed alternative to Charles Proxy,
 Proxyman and mitmproxy for people who want a native Swift app with no licence key, no paid
 tier and no account. macOS 14 or later, built with SwiftPM.
 
-ProxyMaxx is complete as it stands: no feature is held back from this repository.
+Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in this repository.
 
 ![The ProxyMaxx window on macOS, showing the live traffic table, the method and status filter bar, and the flow inspector below](docs/screenshots/mac-app-proxy-served-on-the-app.png)
 
@@ -29,11 +29,11 @@ ProxyMaxx is complete as it stands: no feature is held back from this repository
 
 | | ProxyMaxx | Charles Proxy | Proxyman | mitmproxy |
 |---|---|---|---|---|
-| Price | Free | $50 licence | Free tier + paid | Free |
+| Price | Free | Paid licence | Free tier + paid | Free |
 | Licence | MIT | Proprietary | Proprietary | MIT |
 | Native macOS UI | Yes | Java | Yes | No (TUI or web) |
 | HTTPS MITM | Yes | Yes | Yes | Yes |
-| Mac OS only | Yes | No | Yes | No |
+| macOS only | Yes | No | Yes | No |
 | WebSocket inspection | Yes | Yes | Yes | Yes |
 | Map Local | Yes | Yes | Yes | Addon |
 | Map Remote | Planned | Yes | Yes | Addon |
@@ -43,14 +43,15 @@ ProxyMaxx is complete as it stands: no feature is held back from this repository
 | Headless CLI | Yes | No | Yes | Yes |
 | Open source | Yes | No | No | Yes |
 
-Feature sets move; treat this as a starting point and check each project's own documentation.
+Feature sets and prices move; treat this as a starting point and check each project's own
+documentation.
 
 ## Install
 
 ```sh
-brew tap AgiMaulana/proxymaxx
+brew tap agimaulana/proxymaxx
 brew trust --tap agimaulana/proxymaxx
-brew install --cask AgiMaulana/proxymaxx/proxymaxx
+brew install --cask agimaulana/proxymaxx/proxymaxx
 ```
 
 `brew trust` is needed once when the tap is added by hand, because Homebrew will not load
@@ -68,7 +69,7 @@ open "dist/ProxyMaxx.app"
 
 A DMG works too: download `ProxyMaxx-vX.Y.Z.dmg` from
 [Releases](https://github.com/AgiMaulana/ProxyMaxx/releases), mount it and drag ProxyMaxx to
-Applications. The app is ad-hoc signed and not notarised, so macOS quarantines that copy and
+Applications. The app is ad-hoc signed, not notarised, so macOS quarantines that copy and
 refuses the first launch. Clear the attribute once:
 
 ```sh
@@ -118,6 +119,8 @@ remote server.
 
 - One-click certificate install into the user trust domain, and CA export.
 - System proxy enable and disable for all network services.
+- No administrator password and no privileged helper: see
+  [Privileged operations](#privileged-operations-ca-trust-system-proxy) for why.
 
 ### Mobile and browser support
 
@@ -139,8 +142,10 @@ remote server.
 ### Automation
 
 - A headless **CLI** that drives the same engine and rules, for scripts and AI agents. See
-  [cli/README.md](cli/README.md).
+  [Command line](#command-line) and [cli/README.md](cli/README.md).
 - Verified end to end by integration tests that drive the proxy with real `curl`.
+
+## Roadmap
 
 Not yet implemented, planned in order: Map Remote, Breakpoint, Scripting (JavaScriptCore),
 Allow/Block list, DNS Spoofing, Network Throttling, Reverse Proxy, External/SOCKS proxy,
@@ -170,9 +175,8 @@ The app's menu holds the rest: **Command Line Tool…**, **Install Browser Exten
 
 ## Command line
 
-`proxymaxx-cli` drives the same engine and rules, for scripts and AI agents. `serve` starts
-the proxy, `flows` reads the captured session with the same filters as the window, and
-`stop` shuts it down:
+`serve` starts the proxy, `flows` reads the captured session with the same filters as the
+window, and `stop` shuts it down:
 
 ```sh
 Scripts/build-cli.sh                            # -> Resources/proxymaxx-cli
@@ -262,6 +266,8 @@ not UI copy.
 Nothing is installed outside `~/Library`. Just click **Certificates → Install & Trust
 Certificate**.
 
+![The Certificates pane in ProxyMaxx, with Install & Trust Certificate, the ProxyMaxx Root CA and the manual curl setup](docs/screenshots/mac-app-certificates-pane-install-and-trust-cert.png)
+
 Why that works, and why the obvious approaches do not:
 
 - Trust settings live in two domains with different rules:
@@ -306,6 +312,8 @@ ways that can go wrong are handled explicitly:
 - **Port conflicts are reported.** If something else already listens on the port, for example
   a previous ProxyMaxx run on 9090, the app says so instead of half-binding on top of it.
   Change the port in **Settings**.
+
+![ProxyMaxx refusing to enable the System Proxy, with a banner naming the untrusted root certificate and an Open Certificates button](docs/screenshots/mac-app-failed-enable-system-proxy.png)
 
 If networking is still broken after a crash, clear it from a terminal:
 
@@ -360,6 +368,6 @@ Two NIO details this design depends on, both covered by tests:
 Issues and pull requests are welcome. Run `swift test` before sending a change; it includes
 the end-to-end tests that drive the proxy with real `curl`.
 
-## License
+## Licence
 
 MIT. See [LICENSE](LICENSE).
