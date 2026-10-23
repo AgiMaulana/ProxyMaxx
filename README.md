@@ -131,11 +131,26 @@ remote server.
   points a browser at the proxy through `chrome.proxy`, including when a policy, another
   extension or a command-line flag is overriding the system proxy, and then names which of
   the usual blockers (CA trust, loopback, HTTP/3, a foreign proxy owner) is still in the way.
+
+  <table>
+  <tr>
+  <td width="50%"><img src="docs/screenshots/browser-chrome-disconnected.png" width="320" alt="The extension popup with capture off: the browser resolves proxies directly, and the proxy setting belongs to no one"></td>
+  <td width="50%"><img src="docs/screenshots/browser-chrome-connected.png" width="320" alt="The extension popup with capture on: the browser sends HTTP and HTTPS to 127.0.0.1:9091, and each remaining state is named: applied, trusted, handled, bypassed, not ours, by design"></td>
+  </tr>
+  </table>
+
 - **Android setup, one click**: install the CA as a system certificate, set the device's
   proxy, and install and launch the [tunnel app](docs/android.md). Works on Google APIs
   emulators through `adb root`, and on Google Play AVDs through a bundled, consent-based
   [Magisk route](Resources/android/README.md). The
   [device guide](docs/android.md) covers physical phones.
+
+  <table>
+  <tr>
+  <td width="50%"><img src="docs/screenshots/android-disconnected.png" width="320" alt="The Android tunnel app before connecting: the Connect button is the screen's only action, and the proxy is editable"></td>
+  <td width="50%"><img src="docs/screenshots/android-connected.png" width="320" alt="The Android tunnel app while connected: the session is up, and the proxy locks to 10.0.2.2 HTTP 9091 until you disconnect"></td>
+  </tr>
+  </table>
 
 ![The Android Emulator Setup Guide, with the target device, proxy address and the Magisk option for Google Play AVDs](docs/screenshots/mac-app-android-emulator-setup-guide-in-one-click.png)
 
