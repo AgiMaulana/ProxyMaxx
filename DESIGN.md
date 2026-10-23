@@ -83,8 +83,8 @@ only, never a text background, button fill or page background.
 System stacks only: SF Pro on macOS through SwiftUI's default text styles, Roboto
 through Material 3 on Android.
 
-- Reason to refuse a licensed display face: this is a distributed open-source repo, and
-  dense tabular data needs the platform's own optical sizing and tabular figures more
+- Reason to refuse a licensed display face: this repo is distributed as source available,
+  and dense tabular data needs the platform's own optical sizing and tabular figures more
   than it needs a signature letterform.
 - Monospace is reserved for values the machine authored: HTTP method, status code, header
   names, hex, timings. Real usage today: `.monospacedDigit()` for sizes, times and counts,

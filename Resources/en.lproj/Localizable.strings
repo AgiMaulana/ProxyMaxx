@@ -224,7 +224,7 @@
 "settings.certificate" = "Certificate";
 "settings.commonName" = "Common name";
 "settings.about" = "About";
-"settings.aboutText" = "ProxyMaxx is a from-scratch HTTP/HTTPS debugging proxy. All features are included; there is no licence or paid tier.";
+"settings.aboutText" = "ProxyMaxx is a from-scratch HTTP/HTTPS debugging proxy. Every feature is included and free for internal use; embedding it in a product or hosted service needs a commercial licence. See the LICENSE file.";
 
 /* MARK: Android emulator guide */
 "android.emulator.title" = "Android Emulator Setup Guide";
