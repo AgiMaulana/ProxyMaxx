@@ -1,10 +1,9 @@
-# ProxyMaxx VPN — the Android side
+# ProxyMaxx VPN, the Android side
 
-A small Android app that carries device traffic to the ProxyMaxx proxy. It exists
-because the Android system proxy is advisory: it only reaches apps that choose to honour
-`http_proxy`, and it says nothing at all about traffic that is not HTTP. Flutter, React
-Native and most native HTTP stacks ignore it, which is exactly the traffic people most
-often need to see.
+A small Android app that carries device traffic to the ProxyMaxx proxy. It exists because the
+Android system proxy is advisory: it only reaches apps that choose to honour `http_proxy`, and
+it says nothing at all about traffic that is not HTTP. Flutter, React Native and most native
+HTTP stacks ignore it, which is exactly the traffic people most often need to see.
 
 A `VpnService` sees the packets themselves, so nothing can opt out.
 
@@ -18,7 +17,7 @@ app ──▶ tun ──▶ PacketRouter ──┬── TCP 80/443 ──▶ SO
                                └── UDP        ──────────────────────▶ destination
 ```
 
-- **TCP to 80/443** is carried by the proxy over **SOCKS5** — no authentication,
+- **TCP to 80/443** is carried by the proxy over **SOCKS5**, with no authentication and
   `CONNECT` only.
 - **Other TCP ports** are dialled directly, so the device keeps working normally.
 - **UDP** is forwarded directly, except **destination port 443**, which is dropped so QUIC
@@ -28,12 +27,12 @@ app ──▶ tun ──▶ PacketRouter ──┬── TCP 80/443 ──▶ SO
 
 ### Host names, not just addresses
 
-A tunnel only sees destination *addresses*, so a connection to `142.250.66.100:443` would
-reach the proxy as a bare literal — useless for hostname rules and unreadable in the flow
-list. So the proxy connection is deliberately **not** made on `SYN`. The handshake is
-answered locally, the first payload is held back just long enough to look for a TLS
-ClientHello, and the proxy is then dialled with the real host name from the SNI extension.
-The buffer is flushed immediately afterwards, so nothing is delayed in practice.
+A tunnel only sees destination addresses, so a connection to `142.250.66.100:443` would reach
+the proxy as a bare literal: useless for hostname rules and unreadable in the flow list. So the
+proxy connection is deliberately **not** made on `SYN`. The handshake is answered locally, the
+first payload is held back just long enough to look for a TLS ClientHello, and the proxy is then
+dialled with the real host name from the SNI extension. The buffer is flushed immediately
+afterwards, so nothing is delayed in practice.
 
 Non-TLS traffic keeps its literal address and works the same way.
 
@@ -53,15 +52,18 @@ The macOS app starts the tunnel with `am start`, so these extras are the interfa
 
 ```sh
 adb shell am start -n com.proxymaxx.vpn/.MainActivity \
-    --es proxy_host 10.0.2.2 --ei socks_port 8989 --ei http_port 9090
+    --es proxy_host 10.0.2.2 --ei socks_port 8989 --ei http_port 9090 --ez auto_start true
 ```
 
-The app is also usable on its own — the launcher screen has the same four fields.
+Without `auto_start` the app opens configured but disconnected, and the tap on **Connect** is
+yours to make.
 
 ## Build
 
+The APK is generated, not committed, so a fresh clone has none:
+
 ```sh
-Scripts/build-android-vpn.sh            # debug APK → Resources/android/proxymaxx-vpn.apk
+Scripts/build-android-vpn.sh            # debug APK -> Resources/android/proxymaxx-vpn.apk
 Scripts/build-android-vpn.sh release    # release APK
 ```
 
@@ -70,15 +72,16 @@ Needs a JDK (17+) and an Android SDK with platform 36. Android Studio provides b
 ## Run it on an emulator
 
 The tunnel needs something to talk to: **ProxyMaxx itself serves the SOCKS5 listener on
-8989**, so start it first and leave it running. If 8989 was already taken — by ProxyMaxx, say
-— the app re-selects a port and says so in its log; enter that port instead.
+8989**, so start it first and leave it running. If 8989 was already taken, the proxy selects
+another port and says so in its log; enter that port instead.
 
 ```sh
+Scripts/build-android-vpn.sh
 adb install -r Resources/android/proxymaxx-vpn.apk
 adb shell am start -n com.proxymaxx.vpn/.MainActivity
 ```
 
-On the emulator: leave **Proxy host** at `10.0.2.2` (the host machine as the emulator sees
+On the emulator, leave **Proxy host** at `10.0.2.2` (the host machine as the emulator sees
 it), leave **SOCKS5 port** at `8989`, then tap **Connect** and accept the system VPN prompt.
 Android shows a persistent notification while the tunnel is up.
 
@@ -89,9 +92,9 @@ adb shell am start -n com.proxymaxx.vpn/.MainActivity \
     --es proxy_host 10.0.2.2 --ei socks_port 8989 --ei http_port 9090 --ez auto_start true
 ```
 
-The proxy's certificate must also be trusted **inside the emulator** for HTTPS to be
-readable, otherwise the tunnel carries the traffic but every TLS handshake fails. That is the
-emulator system-store step, not something this app does.
+The proxy's certificate must also be trusted inside the emulator for HTTPS to be readable,
+otherwise the tunnel carries the traffic but every TLS handshake fails. That is the emulator
+system-store step, not something this app does.
 
 ## Limits, stated plainly
 
@@ -100,8 +103,8 @@ emulator system-store step, not something this app does.
 - **No on-device TLS interception.** Certificate work happens in the emulator's system store
   and on the host, never here.
 - **UDP is not proxied.** Only the `443` drop is deliberate; the rest is straight through.
-- **TCP is relayed, not terminated.** The sequence numbers are invented for the client side
-  and the relay assumes in-order delivery, which is what a local tunnel sees. It is not a
+- **TCP is relayed, not terminated.** The sequence numbers are invented for the client side and
+  the relay assumes in-order delivery, which is what a local tunnel sees. It is not a
   general-purpose TCP stack.
-- **HTTP/2 and HTTP/3 are not parsed here.** The tunnel never looks above the transport
-  layer, so anything a client chooses to speak is carried unchanged.
+- **HTTP/2 and HTTP/3 are not parsed here.** The tunnel never looks above the transport layer,
+  so anything a client chooses to speak is carried unchanged.
