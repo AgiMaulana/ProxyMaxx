@@ -25,6 +25,7 @@ build/
 Resources/proxymaxx-cli
 Resources/proxymaxx-cli.new
 Resources/browser/proxymaxx-extension/
+Resources/browser/proxymaxx-firefox-extension
 Resources/android/proxymaxx-vpn.apk
 
 # Android / Gradle

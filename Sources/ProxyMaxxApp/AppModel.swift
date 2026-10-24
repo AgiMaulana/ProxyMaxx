@@ -428,7 +428,7 @@ final class AppModel: ObservableObject {
 
         let extensionURL: URL
         do {
-            extensionURL = try BrowserBridge.installExtension()
+            extensionURL = try BrowserBridge.installExtensions()
         } catch {
             lastError = "\(error)"
             log("Browser extension install failed: \(error)")
