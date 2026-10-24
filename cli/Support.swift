@@ -93,11 +93,13 @@ enum Help {
       proxymaxx-cli flows  [--filter TEXT] [--method M] [--errors-only] [--host H] [--app A]
                            [--pinned] [--saved] [--since 30s|5m|2h|1d] [--limit N]
                            [--flow-mode summary|full] [--out PATH] [--follow] [--text]
+                           [--fail-on-match]
                            Print captured flows from the session log, narrowed exactly
                            like the app's filter bar. --follow tails new flows until
                            interrupted or the engine stops, printing each flow once from
                            its closing snapshot. One NDJSON object per line, the same
                            shape `serve` streams; --text prints one line per flow.
+                           --fail-on-match exits 4 after printing when any flow matched.
       proxymaxx-cli status                 Print owner/pid/ports of the running proxy.
       proxymaxx-cli proxy on | off | status   Manage the macOS system HTTP/HTTPS proxy.
       proxymaxx-cli proxy-host             Print local proxy IP and port as JSON for scripts.
@@ -176,6 +178,8 @@ enum ExitCode {
     /// `serve` found an engine it must not double-run: either the GUI app or another
     /// `proxymaxx-cli serve` is on the port. Agents can branch on it to switch to attach mode.
     static let proxyAlreadyRunning: Int32 = 3
+    /// `flows --fail-on-match` printed at least one selected flow.
+    static let matchedFlows: Int32 = 4
 }
 
 /// Print one line to stderr so agents tailing the process see progress without it
