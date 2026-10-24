@@ -52,6 +52,7 @@ proxymaxx-cli stop   [--force]
 proxymaxx-cli flows  [--filter TEXT] [--method M] [--errors-only] [--host H] [--app A]
                      [--pinned] [--saved] [--since 30s|5m|2h|1d] [--limit N]
                      [--flow-mode summary|full] [--out PATH] [--follow] [--text]
+                     [--fail-on-match]
 proxymaxx-cli status
 proxymaxx-cli proxy on | off | status
 proxymaxx-cli proxy-host
@@ -91,6 +92,16 @@ is printed from its latest snapshot. The filter flags map one-to-one onto the ap
 `--host`, `--app`, `--pinned` and `--saved` all describe one sidebar choice, so at most one
 may be given. `--since` takes a duration or seconds; `--limit` keeps the newest N flows, and
 with `--follow` it stops after N flows.
+
+`--fail-on-match` prints every selected flow, then exits `4` if at least one matched. No
+matches exit `0`; command and input failures keep their existing exit codes. Combine it with
+`--errors-only` to fail CI on HTTP 4xx/5xx responses or transport errors while retaining the
+NDJSON diagnostics:
+
+```sh
+proxymaxx-cli flows --out "$LOG" --errors-only --flow-mode full --fail-on-match \
+  > failing-flows.ndjson
+```
 
 Rules come in two surfaces that write the same file.
 

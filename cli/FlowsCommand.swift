@@ -18,6 +18,7 @@ enum FlowsCommand {
         let limit = try positiveInt(arguments, "limit")
         let asText = arguments.has("text")
         let follow = arguments.has("follow")
+        let failOnMatch = arguments.has("fail-on-match")
 
         func emit(_ flow: Flow) {
             asText ? print(FlowFormat.text(flow)) : FlowFormat.emit(flow, mode: mode)
@@ -32,6 +33,7 @@ enum FlowsCommand {
             // `--limit` keeps the newest N, then prints them oldest-first as captured.
             if let limit { matched = Array(matched.suffix(limit)) }
             for flow in matched { emit(flow) }
+            if failOnMatch, !matched.isEmpty { exit(ExitCode.matchedFlows) }
             return
         }
 
@@ -58,7 +60,10 @@ enum FlowsCommand {
         }
 
         while !interrupt.isInterrupted {
-            if emitUpToLimit(follower.poll()) { return }
+            if emitUpToLimit(follower.poll()) {
+                if failOnMatch { exit(ExitCode.matchedFlows) }
+                return
+            }
             // Nothing left to write once no process owns the engine.
             if ProxyRegistry.read() == nil { break }
             try? await Task.sleep(for: .milliseconds(150))
@@ -66,6 +71,7 @@ enum FlowsCommand {
         // Read the tail and close out whatever never finished, so the last flows the
         // engine wrote are not dropped.
         _ = emitUpToLimit(follower.finish())
+        if failOnMatch, emitted > 0 { exit(ExitCode.matchedFlows) }
     }
 
     // MARK: - Flag parsing
