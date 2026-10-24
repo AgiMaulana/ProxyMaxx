@@ -18,11 +18,22 @@ const HOST_NAME = "com.proxymaxx.browser";
 const LOOPBACK_OPT_IN = "<-loopback>";
 
 const DEFAULTS = {
-  port: 9090,
+  // The port field, unset until someone types one. It is a fallback for when nothing can be
+  // asked, and it is deliberately not seeded with a number: pointing a browser at a port
+  // nobody confirmed takes every page in that browser down, which is the failure this
+  // ordering exists to prevent.
+  port: null,
+  // The last port an engine reported. Kept so a bridge that goes quiet still resolves to
+  // the port that was working, instead of a default that may have moved out from under it.
+  knownPort: null,
   captureLocalhost: false,
   weOwnProxy: false,
   lastProxyError: null,
 };
+
+/// The refusal when capture is asked for before anything has named a port to capture on.
+const NO_PORT_MESSAGE =
+  "Nothing has reported a port to capture on yet. Start ProxyMaxx or `proxymaxx-cli serve`, then try again — or enter the port in the field below.";
 
 function describe(value) {
   return String(value?.message ?? value);
@@ -139,29 +150,52 @@ function askApp(timeoutMilliseconds = 1500) {
 
 // MARK: - Commands
 
-/// The port to point the browser at.
+/// The port the browser should be pointed at, and where that number came from.
 ///
-/// The app reports where it actually listens, because a busy 9090 makes it re-select a
-/// port. The stored value is only the fallback for when the app cannot be asked — for
-/// instance when the engine is being run by the CLI instead of the app.
-async function targetPort() {
-  const app = await askApp();
+/// The app or the CLI reports where it actually listens, because a busy 9090 makes the
+/// engine re-select a port; that number is remembered so it survives the bridge going
+/// quiet. `port: null` means nothing has ever named one, which is a state to report rather
+/// than a number to invent.
+function resolvePort(app, settings) {
   const reported = app.connected ? app.state?.httpPort : null;
-  if (Number.isInteger(reported) && reported > 0) return reported;
-  return (await getSettings()).port;
+  if (Number.isInteger(reported) && reported > 0) return { port: reported, source: "app" };
+  if (Number.isInteger(settings.knownPort) && settings.knownPort > 0) {
+    return { port: settings.knownPort, source: "last" };
+  }
+  if (Number.isInteger(settings.port) && settings.port > 0) {
+    return { port: settings.port, source: "manual" };
+  }
+  return { port: null, source: "none" };
+}
+
+/// Ask the app once, and remember the port it names.
+async function resolveLivePort() {
+  const settings = await getSettings();
+  const app = await askApp();
+  const resolved = resolvePort(app, settings);
+  if (resolved.source === "app") {
+    await chrome.storage.local.set({ knownPort: resolved.port });
+  }
+  return resolved;
 }
 
 async function applyIfOurs() {
   const settings = await getSettings();
-  if (settings.weOwnProxy) {
-    await writeProxyConfig(proxyConfig(await targetPort(), settings.captureLocalhost));
-  }
+  if (!settings.weOwnProxy) return;
+  const { port } = await resolveLivePort();
+  // Nothing confirmed: leaving the browser on its own settings is the only safe move.
+  if (port === null) return;
+  await writeProxyConfig(proxyConfig(port, settings.captureLocalhost));
 }
 
+/// Turn capture on, or say why it cannot be. Returns the refusal message, or null.
 async function enable() {
   const settings = await getSettings();
-  await writeProxyConfig(proxyConfig(await targetPort(), settings.captureLocalhost));
+  const { port } = await resolveLivePort();
+  if (port === null) return NO_PORT_MESSAGE;
+  await writeProxyConfig(proxyConfig(port, settings.captureLocalhost));
   await chrome.storage.local.set({ weOwnProxy: true, lastProxyError: null });
+  return null;
 }
 
 async function disable() {
@@ -169,41 +203,47 @@ async function disable() {
   await chrome.storage.local.set({ weOwnProxy: false });
 }
 
-function buildReport(settings, setting, app, effectivePort) {
+function buildReport(settings, setting, app, resolved, extra) {
   return {
     port: settings.port,
-    // What the browser should be pointed at. Distinct from the stored preference, because
-    // the app can move the port out from under us.
-    effectivePort,
+    // What the browser should be pointed at, and which of the three places that number came
+    // from. Both are distinct from the port field, because an engine can move its port out
+    // from under the field.
+    effectivePort: resolved.port,
+    portSource: resolved.source,
     captureLocalhost: settings.captureLocalhost,
     weOwnProxy: settings.weOwnProxy,
     lastProxyError: settings.lastProxyError,
     mode: setting?.value?.mode ?? "unknown",
     levelOfControl: setting?.levelOfControl ?? "unknown",
     app,
+    ...extra,
   };
 }
 
-async function report() {
+async function report(extra = {}) {
   const settings = await getSettings();
   const [setting, app] = await Promise.all([readProxySetting(), askApp()]);
-  const reported = app.connected ? app.state?.httpPort : null;
-  const effectivePort = Number.isInteger(reported) && reported > 0 ? reported : settings.port;
+  const resolved = resolvePort(app, settings);
+  if (resolved.source === "app") {
+    await chrome.storage.local.set({ knownPort: resolved.port });
+  }
 
   // Self-heal a stale port. The app re-selects when its preferred port is busy, and a
   // browser left pointing at the old one captures nothing while looking perfectly
   // configured. Cheaper to correct here than to expect someone to notice the difference.
   const appliedPort = setting?.value?.rules?.proxyForHttp?.port;
-  if (settings.weOwnProxy && Number.isInteger(appliedPort) && appliedPort !== effectivePort) {
+  const stalePort = Number.isInteger(appliedPort) && appliedPort !== resolved.port;
+  if (settings.weOwnProxy && resolved.port !== null && stalePort) {
     try {
-      await writeProxyConfig(proxyConfig(effectivePort, settings.captureLocalhost));
-      return buildReport(settings, await readProxySetting(), app, effectivePort);
+      await writeProxyConfig(proxyConfig(resolved.port, settings.captureLocalhost));
+      return buildReport(settings, await readProxySetting(), app, resolved, extra);
     } catch {
       // Fall through: the report still names the port we could not apply.
     }
   }
 
-  return buildReport(settings, setting, app, effectivePort);
+  return buildReport(settings, setting, app, resolved, extra);
 }
 
 async function handle(command, message) {
@@ -211,8 +251,9 @@ async function handle(command, message) {
     case "status":
       return report();
     case "enable":
-      await enable();
-      return report();
+      // A refusal is a message about the action, so it rides along with a normal report
+      // instead of replacing it: the panel stays readable and capture simply stays off.
+      return report({ enableError: await enable() });
     case "disable":
       await disable();
       return report();
@@ -221,7 +262,15 @@ async function handle(command, message) {
       await applyIfOurs();
       return report();
     case "setPort": {
-      const port = Number(message.value);
+      // An empty field clears the override, which is how the port goes back to whatever the
+      // app reports. It is the only way to undo a wrong number.
+      const typed = String(message.value ?? "").trim();
+      if (typed === "") {
+        await chrome.storage.local.set({ port: null });
+        await applyIfOurs();
+        return report();
+      }
+      const port = Number(typed);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         return { error: "The port must be between 1 and 65535." };
       }

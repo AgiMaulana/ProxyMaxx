@@ -21,6 +21,12 @@ struct BrowserExtensionPanelView: View {
                     CompanionPathView(path: path)
                 }
                 hostsLine
+                if let check = model.browserBridgeCheck {
+                    Text(check)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text("browser.panel.steps")
                     .font(.callout)
                     .foregroundStyle(.secondary)

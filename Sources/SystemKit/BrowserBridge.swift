@@ -275,4 +275,97 @@ public enum BrowserBridge {
         }
         return removed
     }
+
+    // MARK: - Verification
+
+    /// What running the host once, the way a browser does, revealed.
+    public enum HostCheck: Sendable {
+        /// The host answered. `port` is nil when no engine has published state yet, which
+        /// means the bridge works and there is simply nothing to point a browser at.
+        case answered(port: Int?)
+        case failed(String)
+    }
+
+    /// Run the host exactly as a browser would and report what came back.
+    ///
+    /// The host manifest is invisible and its failure is silent: the browser loads, the
+    /// extension renders, and the only symptom is a popup saying the app cannot be reached,
+    /// with nothing on this side to explain it. So installing the bridge proves the bridge,
+    /// rather than assuming a file that was written is a channel that works.
+    public static func verifyHost(hostBinary: URL, timeout: TimeInterval = 3) -> HostCheck {
+        guard FileManager.default.fileExists(atPath: hostBinary.path) else {
+            return .failed(String(format: String(localized: "error.bridgeNotAt", defaultValue: "The browser bridge binary is not at %@. Build it with `swift build`."), hostBinary.path))
+        }
+        guard FileManager.default.isExecutableFile(atPath: hostBinary.path) else {
+            return .failed(String(format: String(localized: "error.bridgeNotExecutable", defaultValue: "The browser bridge binary at %@ is not executable."), hostBinary.path))
+        }
+
+        let process = Process()
+        process.executableURL = hostBinary
+        // The origin a browser passes as the first argument, so a host that grows an origin
+        // check is exercised here too.
+        process.arguments = ["chrome-extension://\(extensionID)/"]
+
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+        } catch {
+            return .failed("\(error)")
+        }
+
+        // The host answers one message and exits when stdin closes, so writing the request
+        // and closing the pipe is what ends it. No timeout bookkeeping on the happy path.
+        let request = (try? JSONSerialization.data(withJSONObject: ["type": "hello"])) ?? Data()
+        var framed = Data()
+        withUnsafeBytes(of: UInt32(request.count).littleEndian) { framed.append(contentsOf: $0) }
+        framed.append(request)
+        try? input.fileHandleForWriting.write(contentsOf: framed)
+        try? input.fileHandleForWriting.close()
+
+        // A host that never answers must not hang the install, so a watchdog ends it.
+        let watchdog = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
+        defer { watchdog.cancel() }
+
+        let header = read(output.fileHandleForReading, count: 4)
+        guard header.count == 4 else {
+            process.waitUntilExit()
+            return .failed(String(localized: "error.bridgeNoReply", defaultValue: "The browser bridge exited without answering."))
+        }
+
+        let length = header.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).littleEndian }
+        let body = read(output.fileHandleForReading, count: Int(length))
+        process.waitUntilExit()
+
+        guard let reply = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
+            return .failed(String(localized: "error.bridgeUnreadable", defaultValue: "The browser bridge answered with something that is not JSON."))
+        }
+        guard reply["ok"] as? Bool == true else {
+            // "app_not_running" is a working bridge with nothing published yet, which is not
+            // a broken bridge and must not be reported as one.
+            if reply["reason"] as? String == "app_not_running" { return .answered(port: nil) }
+            return .failed(reply["reason"] as? String ?? "unknown")
+        }
+        return .answered(port: reply["httpPort"] as? Int)
+    }
+
+    /// Read up to `count` bytes, returning fewer only at end of stream.
+    ///
+    /// A pipe hands back whatever has arrived, so one read is not one message.
+    private static func read(_ handle: FileHandle, count: Int) -> Data {
+        var data = Data()
+        while data.count < count {
+            let chunk = handle.readData(ofLength: count - data.count)
+            if chunk.isEmpty { break }
+            data.append(chunk)
+        }
+        return data
+    }
 }

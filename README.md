@@ -5,8 +5,8 @@
 **A free, open-source HTTP/HTTPS debugging proxy for macOS.** ProxyMaxx sits between an app
 or a device and the network, decrypts TLS, and shows you the decrypted traffic: headers,
 bodies, timings and WebSocket frames. It is the MIT-licensed alternative to Charles Proxy,
-Proxyman and mitmproxy for people who want a native Swift app with no licence key, no paid
-tier and no account. macOS 14 or later, built with SwiftPM.
+Proxyman, HTTP Toolkit and mitmproxy for people who want a native Swift app with no licence
+key, no paid tier and no account. macOS 14 or later, built with SwiftPM.
 
 Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in this repository.
 
@@ -27,21 +27,25 @@ Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in thi
 
 ## ProxyMaxx compared
 
-| | ProxyMaxx | Charles Proxy | Proxyman | mitmproxy |
-|---|---|---|---|---|
-| Price | Free | Paid licence | Free tier + paid | Free |
-| Licence | MIT | Proprietary | Proprietary | MIT |
-| Native macOS UI | Yes | Java | Yes | No (TUI or web) |
-| HTTPS MITM | Yes | Yes | Yes | Yes |
-| macOS only | Yes | No | Yes | No |
-| WebSocket inspection | Yes | Yes | Yes | Yes |
-| Map Local | Yes | Yes | Yes | Addon |
-| Map Remote | Planned | Yes | Yes | Addon |
-| Breakpoints | Planned | Yes | Yes | Yes |
-| Scripting | Planned | Yes | Yes | Python |
-| Android emulator setup | One click | Manual | Manual | Manual |
-| Headless CLI | Yes | No | Yes | Yes |
-| Open source | Yes | No | No | Yes |
+| | ProxyMaxx | HTTP Toolkit | Charles Proxy | Proxyman | mitmproxy |
+|---|---|---|---|---|---|
+| Price | Free | Free tier + paid | Paid licence | Free tier + paid | Free |
+| Licence | MIT | MIT (Pro is paid) | Proprietary | Proprietary | MIT |
+| Native macOS UI | Yes | No (Electron) | Java | Yes | No (TUI or web) |
+| HTTPS MITM | Yes | Yes | Yes | Yes | Yes |
+| macOS only | Yes | No | No | Yes | No |
+| WebSocket inspection | Yes | Yes | Yes | Yes | Yes |
+| Map Local | Yes | Pro | Yes | Yes | Addon |
+| Map Remote | Planned | Pro | Yes | Yes | Addon |
+| Breakpoints | Planned | Yes | Yes | Yes | Yes |
+| Mock responses | No | Pro | Yes | Yes | Addon |
+| Scripting | Planned | Planned | Yes | Yes | Python |
+| Android emulator setup | One click | One click | Manual | Manual | Manual |
+| Android CA injection | One click | Pro | No | Manual | No |
+| Frida unpinning | No | Pro | No | Yes | Addon |
+| HAR import/export | Planned | Pro | Yes | Yes | Yes |
+| Headless CLI | Yes | No | No | Yes | Yes |
+| Open source | Yes | Yes | No | No | Yes |
 
 Feature sets and prices move; treat this as a starting point and check each project's own
 documentation.
@@ -131,6 +135,14 @@ remote server.
   points a browser at the proxy through `chrome.proxy`, including when a policy, another
   extension or a command-line flag is overriding the system proxy, and then names which of
   the usual blockers (CA trust, loopback, HTTP/3, a foreign proxy owner) is still in the way.
+
+  <table>
+  <tr>
+  <td width="50%"><img src="docs/screenshots/browser-chrome-disconnected.png" width="320" alt="The extension popup with capture off: the browser resolves proxies directly, and the proxy setting belongs to no one"></td>
+  <td width="50%"><img src="docs/screenshots/browser-chrome-connected.png" width="320" alt="The extension popup with capture on: the browser sends HTTP and HTTPS to 127.0.0.1:9091, and each remaining state is named: applied, trusted, handled, bypassed, not ours, by design"></td>
+  </tr>
+  </table>
+
 - **Android setup, one click**: install the CA as a system certificate, set the device's
   proxy, and install and launch the [tunnel app](docs/android.md). Works on Google APIs
   emulators through `adb root`, and on Google Play AVDs through a bundled, consent-based
@@ -138,6 +150,13 @@ remote server.
   [device guide](docs/android.md) covers physical phones.
 
 ![The Android Emulator Setup Guide, with the target device, proxy address and the Magisk option for Google Play AVDs](docs/screenshots/mac-app-android-emulator-setup-guide-in-one-click.png)
+
+  <table>
+  <tr>
+  <td width="50%"><img src="docs/screenshots/android-disconnected.png" width="320" alt="The Android tunnel app before connecting: the Connect button is the screen's only action, and the proxy is editable"></td>
+  <td width="50%"><img src="docs/screenshots/android-connected.png" width="320" alt="The Android tunnel app while connected: the session is up, and the proxy locks to 10.0.2.2 HTTP 9091 until you disconnect"></td>
+  </tr>
+  </table>
 
 ### Automation
 

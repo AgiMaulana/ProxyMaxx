@@ -7,7 +7,7 @@
 </head>
 <body>
   <header>
-    <h1>ProxyMaxx <span id="version" class="version">v1.0.5</span></h1>
+    <h1>ProxyMaxx <span id="version" class="version">v1.0.6</span></h1>
     <span id="app-state" class="chip">Checking…</span>
   </header>
 
@@ -43,6 +43,13 @@
   </div>
 
   <p id="error" class="error" hidden></p>
+
+  <!--
+    Shown only while the app cannot be reached. Starting the app and reloading the extension
+    both happen outside this panel, and a popup that has already rendered its one reading of
+    the bridge would otherwise have to be closed and reopened to see the result.
+  -->
+  <button id="retry" class="retry" type="button" hidden>Check again</button>
 
   <section class="checks">
     <h2>What still stops capture</h2>

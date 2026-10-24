@@ -292,6 +292,9 @@
 "browser.panel.hosts" = "Native host installed for %@.";
 "browser.panel.noBrowser" = "No Chromium browser profile was found. Open the browser once, then install again to write its host manifest.";
 "browser.panel.steps" = "To finish, open chrome://extensions, turn on Developer mode, choose Load unpacked, and select the folder above. If the extension is already loaded, press Reload on its card.";
+"browser.panel.bridgeReady" = "The browser bridge answered: the proxy is listening on 127.0.0.1:%@.";
+"browser.panel.bridgeIdle" = "The browser bridge answered, but no proxy is running yet. Start the proxy, then open the extension's popup again.";
+"browser.panel.bridgeBroken" = "The browser bridge did not answer: %@. Press Reload on the extension's card in chrome://extensions, or install again.";
 "cli.panel.title" = "Command Line Tool";
 "cli.panel.intro" = "The command line tool is bundled with the app. Run it from Terminal, or link it into your PATH.";
 "cli.panel.note" = "It drives the same engine and reads the same session as this window.";
@@ -305,6 +308,8 @@
 "error.bridgeMissing" = "Could not locate the browser bridge binary.";
 "error.bridgeNotAt" = "The browser bridge binary is not at %@. Build it with `swift build`.";
 "error.bridgeNotExecutable" = "The browser bridge binary at %@ is not executable.";
+"error.bridgeNoReply" = "The browser bridge exited without answering.";
+"error.bridgeUnreadable" = "The browser bridge answered with something that is not JSON.";
 "error.extensionNotBuilt" = "The browser extension has not been built. Run Scripts/build-browser-extension.sh first.";
 "error.startForCA" = "Start the proxy first to generate the CA";
 "error.startForCert" = "Start the proxy first to load the root certificate";
