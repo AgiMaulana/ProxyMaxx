@@ -16,6 +16,9 @@ public final class RuleStore: ObservableObject {
     @Published public var isMapLocalEnabled: Bool = true
     /// Named sets of Map Local rules, activated as a group.
     @Published public var mapLocalScenarios: [MapLocalScenario] = []
+    /// The scenario the user last turned on. It survives a manual rule toggle so the list
+    /// can report a modified scenario instead of losing the fact that one is running.
+    @Published public var activeMapLocalScenarioID: UUID?
 
     /// Where the rules are saved on disk; `nil` keeps the store in memory only, which is
     /// what unit tests want so they never read each other's leftovers.
@@ -46,6 +49,16 @@ public final class RuleStore: ObservableObject {
         isMapLocalEnabled = state.isMapLocalEnabled
         mapLocalRules = state.mapLocalRules
         mapLocalScenarios = state.mapLocalScenarios
+        // The saved identifier is what keeps a modified scenario visible across a launch.
+        // Files written before it existed fall back to an exact switchboard match.
+        if let saved = state.activeMapLocalScenarioID,
+           mapLocalScenarios.contains(where: { $0.id == saved }) {
+            activeMapLocalScenarioID = saved
+        } else {
+            activeMapLocalScenarioID = mapLocalScenarios.first { scenario in
+                !scenario.ruleIDs.isEmpty && MapLocalScenarioRunner.isActive(scenario, in: mapLocalRules)
+            }?.id
+        }
     }
 
     private func save() {
@@ -62,7 +75,8 @@ public final class RuleStore: ObservableObject {
             sslProxyingPolicy: sslProxyingPolicy,
             isMapLocalEnabled: isMapLocalEnabled,
             mapLocalRules: mapLocalRules,
-            mapLocalScenarios: mapLocalScenarios
+            mapLocalScenarios: mapLocalScenarios,
+            activeMapLocalScenarioID: activeMapLocalScenarioID
         )
     }
 
@@ -108,6 +122,12 @@ public final class RuleStore: ObservableObject {
     }
 
     public func addMapLocalRule(_ rule: MapLocalRule) {
+        var rule = rule
+        // While a scenario runs, every rule outside it is off. A new rule joins the
+        // switchboard off and is turned on only when it is added to the active scenario.
+        if activeMapLocalScenarioID != nil {
+            rule.isEnabled = false
+        }
         mapLocalRules.append(rule)
     }
 
@@ -118,11 +138,13 @@ public final class RuleStore: ObservableObject {
 
     public func removeMapLocalRules(ids: Set<UUID>) {
         mapLocalRules.removeAll { ids.contains($0.id) }
+        clearActiveScenarioIfEmpty()
     }
 
     /// Drop every Map Local rule at once; the switches and SSL policy survive.
     public func clearMapLocalRules() {
         mapLocalRules.removeAll()
+        activeMapLocalScenarioID = nil
     }
 
     // MARK: - Scenarios
@@ -132,11 +154,43 @@ public final class RuleStore: ObservableObject {
     @discardableResult
     public func activateMapLocalScenario(id: UUID) -> Int {
         guard let scenario = mapLocalScenarios.first(where: { $0.id == id }) else { return 0 }
-        return MapLocalScenarioRunner.activate(scenario, in: &mapLocalRules)
+        let enabled = MapLocalScenarioRunner.activate(scenario, in: &mapLocalRules)
+        activeMapLocalScenarioID = enabled > 0 ? id : nil
+        return enabled
     }
 
     public func isMapLocalScenarioActive(_ scenario: MapLocalScenario) -> Bool {
         MapLocalScenarioRunner.isActive(scenario, in: mapLocalRules)
+    }
+
+    /// Turn every Map Local rule off and leave the active scenario.
+    /// Under exclusive activation this is the one sensible deactivation result: no rule
+    /// from the old scenario survives, and no other rule is switched on.
+    @discardableResult
+    public func turnOffMapLocalRules() -> Int {
+        var disabled = 0
+        for index in mapLocalRules.indices where mapLocalRules[index].isEnabled {
+            mapLocalRules[index].isEnabled = false
+            disabled += 1
+        }
+        activeMapLocalScenarioID = nil
+        return disabled
+    }
+
+    /// Rename a scenario in place, keeping its identifier and memberships.
+    /// Returns false for a blank name or one another scenario already uses.
+    @discardableResult
+    public func renameMapLocalScenario(id: UUID, to name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let index = mapLocalScenarios.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        let collides = mapLocalScenarios.contains {
+            $0.id != id && $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }
+        guard !collides else { return false }
+        mapLocalScenarios[index].name = trimmed
+        return true
     }
 
     /// Add a scenario, replacing any existing one with the same name so the CLI's
@@ -156,24 +210,90 @@ public final class RuleStore: ObservableObject {
             added.name = name
             mapLocalScenarios.append(added)
         }
+        clearActiveScenarioIfEmpty()
     }
 
     public func removeMapLocalScenario(id: UUID) {
         mapLocalScenarios.removeAll { $0.id == id }
+        if activeMapLocalScenarioID == id {
+            activeMapLocalScenarioID = nil
+        }
     }
 
     /// Replace one rule's scenario membership to exactly `ids`.
     ///
     /// Used by the rule editor: the checkboxes are the whole truth for this rule, so a
-    /// scenario not checked drops the rule and a checked one gains it. Other rules in
-    /// those scenarios are untouched.
-    public func setMapLocalScenarios(_ ids: Set<UUID>, forRule ruleID: UUID) {
-        for index in mapLocalScenarios.indices where ids.contains(mapLocalScenarios[index].id) != mapLocalScenarios[index].ruleIDs.contains(ruleID) {
-            if ids.contains(mapLocalScenarios[index].id) {
-                mapLocalScenarios[index].ruleIDs.append(ruleID)
-            } else {
-                mapLocalScenarios[index].ruleIDs.removeAll { $0 == ruleID }
+    /// scenario not checked drops the rule and a checked one gains it. A scenario keeps
+    /// only one rule per endpoint, so joining one that already answers the same endpoint
+    /// removes the older member. The removals are returned so the UI can warn beforehand
+    /// and offer an undo afterwards instead of changing another rule silently.
+    @discardableResult
+    public func setMapLocalScenarios(_ ids: Set<UUID>, forRule ruleID: UUID) -> [MapLocalScenarioSwap] {
+        guard let rule = mapLocalRules.first(where: { $0.id == ruleID }) else { return [] }
+        var swaps: [MapLocalScenarioSwap] = []
+
+        for index in mapLocalScenarios.indices where ids.contains(mapLocalScenarios[index].id) {
+            let scenario = mapLocalScenarios[index]
+            let replacedIDs = scenario.ruleIDs.filter { memberID in
+                memberID != ruleID
+                && mapLocalRules.first(where: { $0.id == memberID })?.endpoint == rule.endpoint
             }
+            for replacedID in replacedIDs {
+                mapLocalScenarios[index].ruleIDs.removeAll { $0 == replacedID }
+                if let replaced = mapLocalRules.first(where: { $0.id == replacedID }) {
+                    swaps.append(MapLocalScenarioSwap(
+                        scenarioID: scenario.id,
+                        scenarioName: scenario.displayName,
+                        addedRuleID: ruleID,
+                        replacedRuleID: replacedID,
+                        replacedRuleName: replaced.displayName
+                    ))
+                }
+            }
+            if !mapLocalScenarios[index].ruleIDs.contains(ruleID) {
+                mapLocalScenarios[index].ruleIDs.append(ruleID)
+            }
+            if !replacedIDs.isEmpty, activeMapLocalScenarioID == scenario.id {
+                for replacedID in replacedIDs {
+                    setMapLocalRule(id: replacedID, enabled: false)
+                }
+                setMapLocalRule(id: ruleID, enabled: true)
+            }
+        }
+
+        for index in mapLocalScenarios.indices where !ids.contains(mapLocalScenarios[index].id) {
+            mapLocalScenarios[index].ruleIDs.removeAll { $0 == ruleID }
+        }
+
+        clearActiveScenarioIfEmpty()
+        return swaps
+    }
+
+    /// Put a replaced rule back where a swap took it from and restore the switches the
+    /// active scenario implies. Later edits are left alone; this only reverses this swap.
+    public func undoMapLocalScenarioSwap(_ swap: MapLocalScenarioSwap) {
+        guard let index = mapLocalScenarios.firstIndex(where: { $0.id == swap.scenarioID }) else { return }
+        mapLocalScenarios[index].ruleIDs.removeAll { $0 == swap.addedRuleID }
+        if !mapLocalScenarios[index].ruleIDs.contains(swap.replacedRuleID) {
+            mapLocalScenarios[index].ruleIDs.append(swap.replacedRuleID)
+        }
+        if activeMapLocalScenarioID == swap.scenarioID {
+            setMapLocalRule(id: swap.addedRuleID, enabled: false)
+            setMapLocalRule(id: swap.replacedRuleID, enabled: true)
+        }
+        clearActiveScenarioIfEmpty()
+    }
+
+    /// A scenario with no surviving rules cannot be a meaningful active setting.
+    private func clearActiveScenarioIfEmpty() {
+        guard let id = activeMapLocalScenarioID else { return }
+        guard let scenario = mapLocalScenarios.first(where: { $0.id == id }) else {
+            activeMapLocalScenarioID = nil
+            return
+        }
+        let existing = Set(mapLocalRules.map(\.id))
+        if !scenario.ruleIDs.contains(where: existing.contains) {
+            activeMapLocalScenarioID = nil
         }
     }
 

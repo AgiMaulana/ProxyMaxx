@@ -197,6 +197,9 @@ enum ScenarioCommand {
             let path = RuleCommand.resolveRulesFile(arguments)
             var file = RuleFile.load(from: path)
             let applied = MapLocalScenarioRunner.activate(scenario, in: &file.mapLocalRules)
+            // The saved id is what lets the app report a modified scenario after a manual
+            // toggle; writing the switches alone would leave it guessing from the board.
+            file.activeMapLocalScenarioID = applied > 0 ? scenario.id : nil
             try file.write(to: path)
             let stale = scenario.ruleIDs.count - applied
             note("scenario '\(scenario.name)' active; \(applied) rule\(applied == 1 ? "" : "s") enabled")

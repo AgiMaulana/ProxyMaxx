@@ -23,6 +23,32 @@ public struct MapLocalScenario: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// One rule taking another's place in a scenario because both answer the same endpoint.
+///
+/// The editor prevents this from happening silently: it warns before saving and offers an
+/// undo afterwards, so a replacement is always a deliberate choice or a reversible one.
+public struct MapLocalScenarioSwap: Equatable, Sendable {
+    public let scenarioID: UUID
+    public let scenarioName: String
+    public let addedRuleID: UUID
+    public let replacedRuleID: UUID
+    public let replacedRuleName: String
+
+    public init(
+        scenarioID: UUID,
+        scenarioName: String,
+        addedRuleID: UUID,
+        replacedRuleID: UUID,
+        replacedRuleName: String
+    ) {
+        self.scenarioID = scenarioID
+        self.scenarioName = scenarioName
+        self.addedRuleID = addedRuleID
+        self.replacedRuleID = replacedRuleID
+        self.replacedRuleName = replacedRuleName
+    }
+}
+
 /// Applies a scenario to the rule list.
 ///
 /// Activation is exclusive: the scenario's rules are turned on and every other rule is

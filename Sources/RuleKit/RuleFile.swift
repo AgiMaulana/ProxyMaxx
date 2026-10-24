@@ -13,19 +13,24 @@ public struct RuleFile: Codable, Equatable, Sendable {
     /// Named sets of Map Local rules. Absent from files written before scenarios existed,
     /// which decode as an empty list thanks to `init(from:)` below.
     public var mapLocalScenarios: [MapLocalScenario]
+    /// The scenario last turned on, kept so a manual toggle after a restart still reads as
+    /// a modified scenario rather than as no scenario at all.
+    public var activeMapLocalScenarioID: UUID?
 
     public init(
         isSSLProxyingEnabled: Bool = true,
         sslProxyingPolicy: SSLProxyingPolicy = .decryptAll,
         isMapLocalEnabled: Bool = true,
         mapLocalRules: [MapLocalRule] = [],
-        mapLocalScenarios: [MapLocalScenario] = []
+        mapLocalScenarios: [MapLocalScenario] = [],
+        activeMapLocalScenarioID: UUID? = nil
     ) {
         self.isSSLProxyingEnabled = isSSLProxyingEnabled
         self.sslProxyingPolicy = sslProxyingPolicy
         self.isMapLocalEnabled = isMapLocalEnabled
         self.mapLocalRules = mapLocalRules
         self.mapLocalScenarios = mapLocalScenarios
+        self.activeMapLocalScenarioID = activeMapLocalScenarioID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -34,6 +39,7 @@ public struct RuleFile: Codable, Equatable, Sendable {
         case isMapLocalEnabled
         case mapLocalRules
         case mapLocalScenarios
+        case activeMapLocalScenarioID
     }
 
     /// Synthesised decoding would reject a file without `mapLocalScenarios`, which every
@@ -45,6 +51,7 @@ public struct RuleFile: Codable, Equatable, Sendable {
         isMapLocalEnabled = try container.decode(Bool.self, forKey: .isMapLocalEnabled)
         mapLocalRules = try container.decode([MapLocalRule].self, forKey: .mapLocalRules)
         mapLocalScenarios = try container.decodeIfPresent([MapLocalScenario].self, forKey: .mapLocalScenarios) ?? []
+        activeMapLocalScenarioID = try container.decodeIfPresent(UUID.self, forKey: .activeMapLocalScenarioID)
     }
 
     /// Read a rule file, falling back to defaults when it is missing or corrupt.

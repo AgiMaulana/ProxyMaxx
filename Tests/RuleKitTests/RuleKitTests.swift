@@ -633,6 +633,56 @@ final class MapLocalScenarioTests: XCTestCase {
     }
 
     @MainActor
+    func testTurnOffClearsEveryRuleAndTheActiveScenario() {
+        let store = RuleStore()
+        let first = MapLocalRule(name: "one", url: "a/*")
+        let second = MapLocalRule(name: "two", url: "b/*")
+        store.addMapLocalRule(first)
+        store.addMapLocalRule(second)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [first.id]))
+
+        store.activateMapLocalScenario(id: store.mapLocalScenarios[0].id)
+        XCTAssertEqual(store.activeMapLocalScenarioID, store.mapLocalScenarios[0].id)
+        XCTAssertEqual(store.mapLocalRules.map(\.isEnabled), [true, false])
+
+        let disabled = store.turnOffMapLocalRules()
+
+        XCTAssertEqual(disabled, 1)
+        XCTAssertTrue(store.mapLocalRules.allSatisfy { !$0.isEnabled },
+                      "Turn off leaves no rule from any scenario running")
+        XCTAssertNil(store.activeMapLocalScenarioID)
+    }
+
+    @MainActor
+    func testNewRuleStartsOffWhileAScenarioIsActive() {
+        let store = RuleStore()
+        let member = MapLocalRule(name: "one", url: "a/*")
+        store.addMapLocalRule(member)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [member.id]))
+        store.activateMapLocalScenario(id: store.mapLocalScenarios[0].id)
+
+        let added = MapLocalRule(name: "two", isEnabled: true, url: "b/*")
+        store.addMapLocalRule(added)
+
+        XCTAssertFalse(store.mapLocalRules[1].isEnabled,
+                       "an outsider added while a scenario runs must not answer a request")
+    }
+
+    @MainActor
+    func testRemovingTheActiveScenarioClearsTheActiveID() {
+        let store = RuleStore()
+        let rule = MapLocalRule(name: "one", url: "a/*")
+        store.addMapLocalRule(rule)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [rule.id]))
+        store.activateMapLocalScenario(id: store.mapLocalScenarios[0].id)
+
+        store.removeMapLocalScenario(id: store.mapLocalScenarios[0].id)
+
+        XCTAssertNil(store.activeMapLocalScenarioID)
+        XCTAssertTrue(store.mapLocalRules[0].isEnabled, "Delete keeps the rules themselves")
+    }
+
+    @MainActor
     func testStoreSavesReplacesAndRemovesScenarios() {
         let store = RuleStore()
         let rule = MapLocalRule(name: "one", url: "a/*")
@@ -649,6 +699,26 @@ final class MapLocalScenarioTests: XCTestCase {
 
         store.removeMapLocalScenario(id: store.mapLocalScenarios[0].id)
         XCTAssertTrue(store.mapLocalScenarios.isEmpty)
+    }
+
+    @MainActor
+    func testRenameKeepsTheScenarioIdentityAndRejectsCollisions() {
+        let store = RuleStore()
+        let rule = MapLocalRule(name: "one", url: "a/*")
+        store.addMapLocalRule(rule)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [rule.id]))
+        store.saveMapLocalScenario(MapLocalScenario(name: "empty-cart", ruleIDs: []))
+        let visitID = store.mapLocalScenarios[0].id
+
+        XCTAssertTrue(store.renameMapLocalScenario(id: visitID, to: "  visit two  "))
+        XCTAssertEqual(store.mapLocalScenarios[0].id, visitID, "renaming keeps the identifier")
+        XCTAssertEqual(store.mapLocalScenarios[0].name, "visit two")
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [rule.id])
+
+        XCTAssertFalse(store.renameMapLocalScenario(id: visitID, to: "Empty-Cart"),
+                       "a name another scenario owns must not overwrite it")
+        XCTAssertEqual(store.mapLocalScenarios[0].name, "visit two")
+        XCTAssertFalse(store.renameMapLocalScenario(id: visitID, to: "   "))
     }
 
     @MainActor
@@ -688,6 +758,7 @@ final class MapLocalScenarioTests: XCTestCase {
         XCTAssertEqual(decoded.mapLocalRules.map(\.name), ["kept"])
         XCTAssertFalse(decoded.isMapLocalEnabled)
         XCTAssertTrue(decoded.mapLocalScenarios.isEmpty)
+        XCTAssertNil(decoded.activeMapLocalScenarioID, "an older file has no scenario running")
     }
 }
 
@@ -735,5 +806,124 @@ final class MapLocalScenarioAssignmentTests: XCTestCase {
         store.addRuleToScenario(second.id, named: "lookup")
         XCTAssertEqual(store.mapLocalScenarios.map(\.name), ["visit", "lookup"])
         XCTAssertEqual(store.mapLocalScenarios[1].ruleIDs, [second.id])
+    }
+
+    @MainActor
+    func testJoiningAScenarioSwapsOutTheRuleForTheSameEndpoint() {
+        let store = RuleStore()
+        let ok = MapLocalRule(name: "consult-ok", method: MethodMatch("GET"), url: "consultation/*")
+        let slow = MapLocalRule(name: "consult-slow", method: MethodMatch("GET"), url: "consultation/*")
+        store.addMapLocalRule(ok)
+        store.addMapLocalRule(slow)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [ok.id]))
+        let visitID = store.mapLocalScenarios[0].id
+
+        let swaps = store.setMapLocalScenarios([visitID], forRule: slow.id)
+
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [slow.id],
+                       "one scenario keeps one rule per endpoint")
+        XCTAssertEqual(swaps.count, 1)
+        XCTAssertEqual(swaps[0].scenarioID, visitID)
+        XCTAssertEqual(swaps[0].replacedRuleID, ok.id)
+        XCTAssertEqual(swaps[0].replacedRuleName, "consult-ok")
+        XCTAssertEqual(swaps[0].addedRuleID, slow.id)
+        XCTAssertEqual(store.mapLocalRules.map(\.isEnabled), [true, true],
+                       "the rule that left the scenario is still a normal, enabled rule")
+    }
+
+    @MainActor
+    func testSwapIgnoresADifferentMethodAndOtherScenarios() {
+        let store = RuleStore()
+        let getRule = MapLocalRule(name: "get", method: MethodMatch("GET"), url: "consultation/*")
+        let postRule = MapLocalRule(name: "post", method: MethodMatch("POST"), url: "consultation/*")
+        store.addMapLocalRule(getRule)
+        store.addMapLocalRule(postRule)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [getRule.id]))
+        store.saveMapLocalScenario(MapLocalScenario(name: "lookup", ruleIDs: [postRule.id]))
+
+        let bothScenarios = Set(store.mapLocalScenarios.map(\.id))
+        let swaps = store.setMapLocalScenarios(bothScenarios, forRule: postRule.id)
+
+        XCTAssertTrue(swaps.isEmpty, "a POST and a GET are different endpoints")
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [getRule.id, postRule.id])
+        XCTAssertEqual(store.mapLocalScenarios[1].ruleIDs, [postRule.id])
+    }
+
+    @MainActor
+    func testUndoSwapRestoresMembershipAndTheActiveSwitchboard() {
+        let store = RuleStore()
+        let ok = MapLocalRule(name: "consult-ok", method: MethodMatch("GET"), url: "consultation/*")
+        let slow = MapLocalRule(name: "consult-slow", method: MethodMatch("GET"), url: "consultation/*")
+        store.addMapLocalRule(ok)
+        store.addMapLocalRule(slow)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [ok.id]))
+        let visitID = store.mapLocalScenarios[0].id
+        store.activateMapLocalScenario(id: visitID)
+
+        let swaps = store.setMapLocalScenarios([visitID], forRule: slow.id)
+        XCTAssertEqual(store.mapLocalRules.map(\.isEnabled), [false, true],
+                       "the active scenario switches to the rule that replaced it")
+        XCTAssertEqual(store.activeMapLocalScenarioID, visitID)
+
+        for swap in swaps {
+            store.undoMapLocalScenarioSwap(swap)
+        }
+
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [ok.id])
+        XCTAssertEqual(store.mapLocalRules.map(\.isEnabled), [true, false])
+        XCTAssertEqual(store.activeMapLocalScenarioID, visitID)
+    }
+
+    @MainActor
+    func testDriftSurvivesAReload() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RuleKitDriftTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("rules.json")
+        let store = RuleStore(persistenceURL: url)
+        let first = MapLocalRule(name: "one", method: MethodMatch("GET"), url: "a/*")
+        let second = MapLocalRule(name: "two", method: MethodMatch("GET"), url: "b/*")
+        store.addMapLocalRule(first)
+        store.addMapLocalRule(second)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [first.id]))
+        store.activateMapLocalScenario(id: store.mapLocalScenarios[0].id)
+        store.setMapLocalRule(id: second.id, enabled: true)
+        store.flushRulesToDisk()
+
+        let reloaded = RuleStore(persistenceURL: url)
+
+        XCTAssertEqual(reloaded.activeMapLocalScenarioID, reloaded.mapLocalScenarios[0].id,
+                       "a manual toggle must not make the app forget which scenario is running")
+        XCTAssertFalse(
+            reloaded.isMapLocalScenarioActive(reloaded.mapLocalScenarios[0]),
+            "the switchboard no longer matches, which is what makes the scenario read as modified"
+        )
+    }
+
+    func testUntitledNamesSkipNamesAlreadyInUse() {
+        XCTAssertEqual(MapLocalRuleNaming.untitled(existingNames: []), "Untitled Rule")
+        XCTAssertEqual(MapLocalRuleNaming.untitled(existingNames: ["other"]), "Untitled Rule")
+        XCTAssertEqual(MapLocalRuleNaming.untitled(existingNames: ["Untitled Rule"]), "Untitled Rule 2")
+        XCTAssertEqual(
+            MapLocalRuleNaming.untitled(existingNames: ["untitled rule 2", "Untitled Rule"]),
+            "Untitled Rule 3"
+        )
+    }
+
+    func testEndpointIdentityIgnoresMatchStyleAndDestination() {
+        let wildcard = MapLocalRule(name: "one", method: MethodMatch("GET"), url: "consultation/*")
+        let exact = MapLocalRule(
+            name: "two",
+            method: MethodMatch("get"),
+            url: " consultation/* ",
+            matchStyle: .exact,
+            destination: .directory("/tmp")
+        )
+
+        XCTAssertEqual(wildcard.endpoint, exact.endpoint)
+        XCTAssertEqual(wildcard.endpoint.label, "GET consultation/*")
+        XCTAssertNotEqual(
+            wildcard.endpoint,
+            MapLocalRule(name: "three", method: MethodMatch("POST"), url: "consultation/*").endpoint
+        )
     }
 }
