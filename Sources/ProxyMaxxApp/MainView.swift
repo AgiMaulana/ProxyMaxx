@@ -378,9 +378,11 @@ struct MainView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(flow.url, forType: .string)
                 }
-                Button("main.copyAsCurl") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(flow.curlCommand, forType: .string)
+                Menu("main.export") {
+                    Button("main.exportCurl") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(flow.curlCommand, forType: .string)
+                    }
                 }
             } else {
                 Text("main.noFlowSelected")

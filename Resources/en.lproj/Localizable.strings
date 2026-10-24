@@ -46,8 +46,8 @@
 "common.empty" = "Empty";
 "common.untitled" = "Untitled";
 "common.any" = "ANY";
-"common.mapLocal" = "Map Local";
-"common.sslProxying" = "SSL Proxying";
+"common.mapLocal" = "Local Override";
+"common.sslProxying" = "TLS Inspect";
 "common.certificates" = "Certificates";
 "common.android" = "Android";
 "common.log" = "Log";
@@ -69,12 +69,12 @@
 "common.body" = "Body";
 
 /* MARK: Main window */
-"main.favorites" = "Favorites";
+"main.favorites" = "Collections";
 "main.all" = "All";
 "main.pinned" = "Pinned";
 "main.saved" = "Saved";
 "main.apps" = "Apps (%lld)";
-"main.domains" = "Domains (%lld)";
+"main.domains" = "Hosts (%lld)";
 "main.localAddress" = "127.0.0.1:%lld";
 "main.localAddressWithOwner" = "127.0.0.1:%lld · %@";
 "main.flowCount" = "%lld flows";
@@ -87,9 +87,10 @@
 "main.trustCertificateAction" = "Open Certificates";
 "main.filterPlaceholder" = "Filter by host, path, method or status";
 "main.errorsOnly" = "Errors only";
-"main.mapResponse" = "Map Response to Map Local…";
+"main.mapResponse" = "Mock Response in Local Override…";
 "main.copyURL" = "Copy URL";
-"main.copyAsCurl" = "Copy as cURL";
+"main.export" = "Export";
+"main.exportCurl" = "cURL";
 "main.noFlowSelected" = "No flow selected";
 "main.err" = "ERR";
 "main.selectFlow" = "Select a flow to inspect it";
@@ -97,7 +98,7 @@
 /* MARK: Flow inspector */
 "inspector.decoded" = "decoded %@";
 "inspector.metric" = "%@: %@";
-"inspector.copyCurlHelp" = "Copy this request as a curl command";
+"inspector.copyCurlHelp" = "Export this request as a curl command";
 "inspector.decrypted" = "Decrypted";
 "inspector.tunneled" = "Tunneled";
 "inspector.requestHeaders" = "Request Headers";
@@ -112,14 +113,14 @@
 "inspector.contentLength" = "Content-Length";
 "inspector.mappedFrom" = "Mapped from";
 
-/* MARK: Map Local */
-"mapLocal.enable" = "Enable Map Local Tool";
-"mapLocal.intro" = "Map a Response with a Local File or Directory. Support Status Code, Headers and Body.";
+/* MARK: Local Override */
+"mapLocal.enable" = "Enable Local Override";
+"mapLocal.intro" = "Answer a matched request with a mock response from a local file or directory. Status code, headers and body are all yours to set.";
 "mapLocal.orderHint" = "Each request is checked against the rules from top to bottom, stopping when a match is found.";
 "mapLocal.matchingRule" = "Matching Rule";
 "mapLocal.mapFrom" = "Map from";
 "mapLocal.matchingURLs" = "Matching URLs";
-"mapLocal.mapBody" = "Map Body Response from File";
+"mapLocal.mapBody" = "Mock Response Body from File";
 "mapLocal.emptyHint" = "Click New Rule to add an entry";
 "mapLocal.noEnabledRules" = "No enabled rules to show";
 "mapLocal.anyURL" = "Any URL";
@@ -132,9 +133,9 @@
 "mapLocal.showEnabled" = "Show enabled";
 "mapLocal.showEnabledHelp" = "Show enabled rules only";
 "mapLocal.shortcuts" = "New: ⌘N   Edit: ⌘⏎   Delete: ⌘⌫   Duplicate: ⌘D   Toggle: Space";
-"mapLocal.createTitle" = "Create Map Local Rule";
-"mapLocal.editTitle" = "Edit Map Local Rule";
-"mapLocal.formSubtitle" = "Configure URL matching and local response source";
+"mapLocal.createTitle" = "Create Local Override Rule";
+"mapLocal.editTitle" = "Edit Local Override Rule";
+"mapLocal.formSubtitle" = "Configure URL matching and the mock response source";
 "mapLocal.nameLabel" = "Name:";
 "mapLocal.untitledRule" = "Untitled Rule";
 "mapLocal.urlLabel" = "URL:";
@@ -143,7 +144,7 @@
 "mapLocal.includeSubpaths" = "Include all subpaths of this URL";
 "mapLocal.methodLabel" = "Method:";
 "mapLocal.delayLabel" = "Delay:";
-"mapLocal.mapTo" = "Map To";
+"mapLocal.mapTo" = "Mock From";
 "mapLocal.localFile" = "Local File";
 "mapLocal.localDirectory" = "Local Directory";
 "mapLocal.directoryLabel" = "Directory:";
@@ -152,7 +153,7 @@
 "mapLocal.filePathPlaceholder" = "File path";
 "mapLocal.select" = "Select…";
 "mapLocal.finder" = "Finder";
-"mapLocal.responseContentLabel" = "Response Content (HTTP Message / Body):";
+"mapLocal.responseContentLabel" = "Mock Response Content (HTTP Message / Body):";
 "mapLocal.insertTemplate" = "Insert Default Template";
 "mapLocal.fileHint" = "An HTTP/1.x message in the file is served whole, including status and headers. Any other file is served as the body.";
 "mapLocal.directoryHint" = "The request path is resolved inside the directory. A missing file falls through to the remote server.";
@@ -188,9 +189,9 @@
 "rule.op.regex" = "matches regex";
 "rule.op.exists" = "exists";
 
-/* MARK: SSL Proxying */
-"ssl.enable" = "Enable SSL Proxying";
-"ssl.intro" = "Decrypt HTTPS traffic for the hosts below. Excluded hosts are relayed opaquely, so their TLS is never intercepted. Wildcards such as `*.example.com` are supported.";
+/* MARK: TLS Inspect */
+"ssl.enable" = "Enable HTTPS Decryption";
+"ssl.intro" = "Decrypt HTTPS traffic for the hosts below. Excluded hosts are relayed opaquely, so their TLS is never inspected. Wildcards such as `*.example.com` are supported.";
 "ssl.include" = "Include (decrypt these)";
 "ssl.includeEmpty" = "Empty — decrypt everything not excluded";
 "ssl.exclude" = "Exclude (never decrypt)";
@@ -280,7 +281,7 @@
 /* MARK: Menus */
 "menu.about" = "About ProxyMaxx";
 "menu.clearSession" = "Clear Session";
-"menu.mapLocal" = "Map Local…";
+"menu.mapLocal" = "Local Override…";
 "menu.androidEmulator" = "Open Android Emulator Guide";
 "menu.androidDevice" = "Open Android Device Guide";
 "menu.installBrowserExtension" = "Install Browser Extension…";

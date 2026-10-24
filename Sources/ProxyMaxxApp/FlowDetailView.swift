@@ -61,7 +61,9 @@ struct FlowDetailView: View {
         }
         .contextMenu {
             Button("main.copyURL") { Self.copyToPasteboard(flow.url) }
-            Button("main.copyAsCurl") { Self.copyToPasteboard(flow.curlCommand) }
+            Menu("main.export") {
+                Button("main.exportCurl") { Self.copyToPasteboard(flow.curlCommand) }
+            }
         }
     }
 
@@ -101,7 +103,7 @@ struct FlowDetailView: View {
                         .help(flow.localMapSource ?? "")
                 }
                 Spacer()
-                copyCurlButton
+                exportMenu
             }
             Text(flow.url)
                 .font(.callout)
@@ -118,21 +120,22 @@ struct FlowDetailView: View {
 
     /// The context menu already offers this, but a menu nobody opens hides the feature.
     /// The button sits in the header so it is visible as soon as a flow is selected.
-    private var copyCurlButton: some View {
-        Button {
-            Self.copyToPasteboard(flow.curlCommand)
-            didCopyCurl = true
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                didCopyCurl = false
+    private var exportMenu: some View {
+        Menu {
+            Button(didCopyCurl ? L10n.string("common.copied") : L10n.string("main.exportCurl")) {
+                Self.copyToPasteboard(flow.curlCommand)
+                didCopyCurl = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    didCopyCurl = false
+                }
             }
         } label: {
-            Label(didCopyCurl ? L10n.string("common.copied") : L10n.string("main.copyAsCurl"),
-                  systemImage: didCopyCurl ? "checkmark" : "terminal")
+            Label(L10n.string("main.export"), systemImage: "square.and.arrow.up")
         }
-        .buttonStyle(.bordered)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
         .controlSize(.small)
-        .tint(didCopyCurl ? .green : nil)
         .help("inspector.copyCurlHelp")
     }
 
