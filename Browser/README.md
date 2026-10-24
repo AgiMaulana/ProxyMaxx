@@ -1,6 +1,6 @@
 # ProxyMaxx, the browser side
 
-A Chromium extension that makes a browser actually use the proxy, and then reports which of
+A Chromium and Firefox extension that makes a browser actually use the proxy, and then reports which of
 the things that stop capture are still stopping it.
 
 It exists for the same reason the Android app does, since the platform's own proxy setting is
@@ -51,9 +51,8 @@ popup ──▶ service worker ──┬── chrome.proxy.settings ──▶ t
 ## Build and load
 
 ```sh
-Scripts/build-browser-extension.sh   # -> Resources/browser/proxymaxx-extension/
-Scripts/bundle-app.sh                # copies it, and the host, into the .app
-```
+Scripts/build-browser-extension.sh   # -> Resources/browser/proxymaxx-extension/ & proxymaxx-firefox-extension/
+Scripts/bundle-app.sh                # copies them, and the host, into the .app
 
 Then, once per browser:
 
@@ -62,8 +61,9 @@ Then, once per browser:
    `~/Library/Application Support/ProxyMaxx/Browser Extension/`, and opens a panel with that
    path, a **Copy Path** action, and **Open in Finder**. The panel also names the browsers it
    reached, or says none were found; the manifests themselves are invisible.
-2. In the browser, open `chrome://extensions`, turn on **Developer mode**, choose
-   **Load unpacked**, and pick `proxymaxx-extension` from that folder.
+2. In the browser: for Chromium, open `chrome://extensions`, turn on **Developer mode**, choose
+   **Load unpacked**, and pick `proxymaxx-extension`. For Firefox, open `about:debugging#/runtime/this-firefox`,
+   click **Load Temporary Add-On…**, and pick `manifest.json` from `proxymaxx-firefox-extension`.
 3. Start the app or `proxymaxx-cli serve`, and confirm the port. The extension follows
    whatever port the engine owner reports, the app's or the CLI's, so the two cannot drift
    apart.
@@ -83,8 +83,7 @@ socket to the port.
 
 ## Limits, stated plainly
 
-- **Chromium only.** Firefox's `browser.proxy` is a different API with a different permission
-  model, and Safari has no proxy API at all. Neither is wired up.
+- **Safari only.** Safari has no proxy API at all and is not wired up.
 - **The extension cannot see the OS proxy.** In `system` mode, `chrome.proxy.settings.get`
   returns the mode and control level but not the resolved server, so the popup reports
   "system" rather than the address. There is no API that exposes it.

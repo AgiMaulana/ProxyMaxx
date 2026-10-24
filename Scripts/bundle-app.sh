@@ -130,6 +130,7 @@ check_signature() {
 check_present "Contents/MacOS/ProxyMaxx"
 check_present "Contents/Resources/proxymaxx-cli"
 check_present "Contents/Resources/Browser/proxymaxx-extension/manifest.json"
+check_present "Contents/Resources/Browser/proxymaxx-firefox-extension/manifest.json"
 check_present "Contents/Resources/Android/install_certificate_android_emulator.sh"
 check_present "Contents/Resources/AppIcon.icns"
 check_present "Contents/Resources/en.lproj/Localizable.strings"

@@ -16,6 +16,12 @@ public enum BrowserBridge {
     /// the two ever disagree.
     public static let extensionID = "cbmoimaniepmlkjbkdpeoeflbhaefeae"
 
+    /// One fixed identity for the Firefox add-on, so its native messaging host manifest can
+    /// whitelist it. Firefox pins the ID itself: whatever `browser_specific_settings.gecko.id`
+    /// says is what the host manifest must name. `Scripts/build-browser-extension.sh`
+    /// verifies the two agree.
+    public static let firefoxExtensionID = "proxy@proxymaxx.app"
+
     /// The name both sides agree on: `chrome.runtime.connectNative(BrowserBridge.hostName)`.
     public static let hostName = "com.proxymaxx.browser"
 
@@ -47,14 +53,21 @@ public enum BrowserBridge {
         }
     }
 
-    /// A Chromium browser found on this Mac, under the name its own users recognise it by.
+    /// A browser found on this Mac, under the name its own users recognise it by.
     public struct Browser: Sendable {
+        public enum Kind: Sendable {
+            case chromium
+            case firefox
+        }
+
         public let name: String
         public let directory: URL
+        public let kind: Kind
 
-        public init(name: String, directory: URL) {
+        public init(name: String, directory: URL, kind: Kind = .chromium) {
             self.name = name
             self.directory = directory
+            self.kind = kind
         }
     }
 
@@ -103,29 +116,23 @@ public enum BrowserBridge {
             .appendingPathComponent(hostBinaryName)
     }
 
-    /// The unpacked extension to load, or nil when it has not been built yet.
-    ///
-    /// Bundled first; the checkout second, so `swift run` during development finds it.
-    public static func extensionFolder() -> URL? {
-        if let resources = Bundle.main.resourceURL {
-            let bundled = resources
-                .appendingPathComponent("Browser", isDirectory: true)
-                .appendingPathComponent(extensionFolderName, isDirectory: true)
-            if FileManager.default.fileExists(atPath: bundled.path) { return bundled }
-        }
-        // Sources/SystemKit/BrowserBridge.swift -> the package root.
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let checkout = packageRoot.appendingPathComponent("Browser/ProxyMaxxExtension", isDirectory: true)
-        return FileManager.default.fileExists(atPath: checkout.path) ? checkout : nil
-    }
-
     /// The folder name a browser sees, staged and installed alike.
     public static let extensionFolderName = "proxymaxx-extension"
 
-    /// Where the extension is installed for the browser to load.
+    /// The Firefox counterpart's folder name, staged and installed alike.
+    public static let firefoxFolderName = "proxymaxx-firefox-extension"
+
+    /// The first path that exists, ignoring nils.
+    static func firstExisting(_ candidates: URL?...) -> URL? {
+        for case let candidate? in candidates {
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    /// Where each extension is installed for the browser to load.
     ///
     /// Deliberately outside the app bundle. Finder refuses to reveal a path inside a
     /// `.app` — it selects the bundle instead — and Chrome remembers this path, so it must
@@ -136,14 +143,50 @@ public enum BrowserBridge {
             .appendingPathComponent(extensionFolderName, isDirectory: true)
     }
 
-    /// Copy the built extension to the location the browser loads it from.
+    /// The Firefox counterpart of `installedExtensionDirectory`, so the two can be
+    /// revealed and loaded side by side.
+    public static var installedFirefoxExtensionDirectory: URL {
+        supportDirectory
+            .appendingPathComponent("Browser Extension", isDirectory: true)
+            .appendingPathComponent(firefoxFolderName, isDirectory: true)
+    }
+
+    /// Copy the built extension(s) to the location the browser loads them from.
     ///
-    /// Returns that location, so the caller can reveal it and name it. This is the part of
-    /// "install" the user can see; the host manifests are invisible by nature.
+    /// Returns those locations, so the caller can reveal them and name them. This is the
+    /// part of "install" the user can see; the host manifests are invisible by nature.
+    /// A source that is missing is skipped; if none remain, there is nothing to reveal.
     @discardableResult
-    public static func installExtension() throws -> URL {
-        guard let source = extensionFolder() else { throw BridgeError.extensionNotBuilt }
-        return try copyExtension(from: source, to: installedExtensionDirectory)
+    public static func installExtensions() throws -> URL {
+        let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("Browser", isDirectory: true)
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sources: [(destination: URL, source: URL?)] = [
+            (
+                installedExtensionDirectory,
+                firstExisting(
+                    bundled?.appendingPathComponent(extensionFolderName, isDirectory: true),
+                    packageRoot.appendingPathComponent("Browser/ProxyMaxxExtension", isDirectory: true)
+                )
+            ),
+            (
+                installedFirefoxExtensionDirectory,
+                firstExisting(
+                    bundled?.appendingPathComponent(firefoxFolderName, isDirectory: true),
+                    packageRoot.appendingPathComponent("Browser/FirefoxExtension", isDirectory: true)
+                )
+            ),
+        ]
+        var installedAny = false
+        for case let (destination, source?) in sources {
+            _ = try copyExtension(from: source, to: destination)
+            installedAny = true
+        }
+        guard installedAny else { throw BridgeError.extensionNotBuilt }
+        return supportDirectory.appendingPathComponent("Browser Extension", isDirectory: true)
     }
 
     /// Copy a built extension into place, replacing whatever is already there.
@@ -183,26 +226,27 @@ public enum BrowserBridge {
 
     // MARK: - Native messaging host
 
-    /// Every Chromium browser present on this Mac, newest profile first, but only those
+    /// Every browser present on this Mac, newest profile first, but only those
     /// whose profile directory exists.
     public static func detectedBrowsers() -> [Browser] {
         let applicationSupport = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
 
-        let profiles: [(name: String, path: String)] = [
-            ("Chrome", "Google/Chrome"),
-            ("Chrome Beta", "Google/Chrome Beta"),
-            ("Chrome Dev", "Google/Chrome Dev"),
-            ("Chrome Canary", "Google/Chrome Canary"),
-            ("Chromium", "Chromium"),
-            ("Brave", "BraveSoftware/Brave-Browser"),
-            ("Brave Beta", "BraveSoftware/Brave-Browser-Beta"),
-            ("Edge", "Microsoft Edge"),
-            ("Edge Beta", "Microsoft Edge Beta"),
-            ("Edge Dev", "Microsoft Edge Dev"),
-            ("Edge Canary", "Microsoft Edge Canary"),
-            ("Vivaldi", "Vivaldi"),
+        let profiles: [(name: String, path: String, kind: Browser.Kind)] = [
+            ("Chrome", "Google/Chrome", .chromium),
+            ("Chrome Beta", "Google/Chrome Beta", .chromium),
+            ("Chrome Dev", "Google/Chrome Dev", .chromium),
+            ("Chrome Canary", "Google/Chrome Canary", .chromium),
+            ("Chromium", "Chromium", .chromium),
+            ("Brave", "BraveSoftware/Brave-Browser", .chromium),
+            ("Brave Beta", "BraveSoftware/Brave-Browser-Beta", .chromium),
+            ("Edge", "Microsoft Edge", .chromium),
+            ("Edge Beta", "Microsoft Edge Beta", .chromium),
+            ("Edge Dev", "Microsoft Edge Dev", .chromium),
+            ("Edge Canary", "Microsoft Edge Canary", .chromium),
+            ("Vivaldi", "Vivaldi", .chromium),
+            ("Firefox", "Firefox", .firefox),
         ]
 
         return profiles.compactMap { profile in
@@ -210,7 +254,8 @@ public enum BrowserBridge {
             guard FileManager.default.fileExists(atPath: root.path) else { return nil }
             return Browser(
                 name: profile.name,
-                directory: root.appendingPathComponent("NativeMessagingHosts", isDirectory: true)
+                directory: root.appendingPathComponent("NativeMessagingHosts", isDirectory: true),
+                kind: profile.kind
             )
         }
     }
@@ -238,20 +283,28 @@ public enum BrowserBridge {
             throw BridgeError.hostBinaryNotExecutable(hostBinary)
         }
 
-        let manifest: [String: Any] = [
-            "name": hostName,
-            "description": "ProxyMaxx browser bridge",
-            "path": hostBinary.path,
-            "type": "stdio",
-            "allowed_origins": ["chrome-extension://\(extensionID)/"],
-        ]
-        let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
-
         var written: [InstalledManifest] = []
         for browser in browsers {
             do {
                 try FileManager.default.createDirectory(at: browser.directory, withIntermediateDirectories: true)
                 let target = browser.directory.appendingPathComponent("\(hostName).json")
+
+                var manifest: [String: Any] = ["name": hostName]
+                switch browser.kind {
+                case .chromium:
+                    // Chromium whitelists the extension's origin, which is pinned by the `key`
+                    // in the extension's manifest.
+                    manifest["allowed_origins"] = ["chrome-extension://\(extensionID)/"]
+                case .firefox:
+                    // Firefox whitelists the add-on ID instead, which is pinned by
+                    // `browser_specific_settings.gecko.id` in the extension's manifest.
+                    manifest["allowed_extensions"] = [firefoxExtensionID]
+                }
+                manifest["description"] = "ProxyMaxx browser bridge"
+                manifest["path"] = hostBinary.path
+                manifest["type"] = "stdio"
+
+                let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
                 try data.write(to: target, options: .atomic)
                 written.append(InstalledManifest(browser: browser.name, manifest: target))
             } catch {
