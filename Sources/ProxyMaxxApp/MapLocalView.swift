@@ -185,31 +185,16 @@ struct MapLocalView: View {
     @ViewBuilder
     private func activeScenarioPill(_ scenario: MapLocalScenario) -> some View {
         let modified = isModified(scenario)
-        let tint: Color = modified ? .orange : .green
-        HStack(spacing: 8) {
-            Text(modified
-                 ? L10n.format(
-                    "mapLocal.modifiedPill",
-                    scenario.displayName,
-                    enabledMemberCount(scenario),
-                    ruleCount(in: scenario)
-                 )
-                 : L10n.format("mapLocal.activePill", scenario.displayName))
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(tint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(tint.opacity(0.15)))
-                .lineLimit(1)
-                .help("mapLocal.scenarioHelp")
-
-            if modified {
-                Button("mapLocal.resetScenario") { activate(scenario) }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    .help("mapLocal.resetScenarioHelp")
-            }
+        let title = modified
+            ? L10n.format(
+                "mapLocal.modifiedPill",
+                scenario.displayName,
+                enabledMemberCount(scenario),
+                ruleCount(in: scenario)
+             )
+            : L10n.format("mapLocal.activePill", scenario.displayName)
+        ScenarioStatusPillView(title: title, isModified: modified) {
+            activate(scenario)
         }
     }
 
@@ -1411,22 +1396,7 @@ struct MapLocalEditorView: View {
     }
 
     private func scenarioChip(_ name: String, remove: @escaping () -> Void) -> some View {
-        HStack(spacing: 5) {
-            Text(name).font(.callout)
-            Button(action: remove) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12, height: 12)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(L10n.format("mapLocal.removeScenarioHelp", name)))
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(Color(NSColor.controlBackgroundColor)))
-        .overlay(Capsule().stroke(Color(NSColor.separatorColor), lineWidth: 1))
+        ScenarioChipView(name: name, remove: remove)
     }
 
     private var scenarioPicker: some View {
@@ -1683,54 +1653,4 @@ private struct DetailWidthKey: PreferenceKey {
     }
 }
 
-/// Lays chips out left to right, wrapping to a new line when the width runs out.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var widest: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            widest = max(widest, x + size.width)
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-
-        return CGSize(
-            width: maxWidth.isFinite ? maxWidth : widest,
-            height: subviews.isEmpty ? 0 : y + rowHeight
-        )
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(
-                at: CGPoint(x: x, y: y),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(size)
-            )
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-    }
-}
+// FlowLayout and chip/pill components are shared and reused from MapLocalComponents.swift
