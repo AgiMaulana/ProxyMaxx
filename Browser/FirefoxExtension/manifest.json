@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "ProxyMaxx",
+  "version": "1.0.6",
+  "description": "Point this browser at ProxyMaxx and report what is still stopping capture.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "proxy@proxymaxx.app",
+      "strict_min_version": "115.0"
+      }
+  },
+  "permissions": ["proxy", "storage", "nativeMessaging"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "ProxyMaxx",
+    "default_popup": "popup.html"
+  }
+}

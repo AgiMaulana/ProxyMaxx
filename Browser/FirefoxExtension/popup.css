@@ -1,0 +1,220 @@
+:root {
+  color-scheme: light dark;
+
+  --accent: #6366f1;
+  --surface: color-mix(in srgb, CanvasText 4%, Canvas);
+  --border: color-mix(in srgb, CanvasText 18%, Canvas);
+  --muted: color-mix(in srgb, CanvasText 55%, Canvas);
+  --good: #1a7f37;
+  --warn: #9a6700;
+
+  font-family: -apple-system, system-ui, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  padding: 12px;
+  background: Canvas;
+  color: CanvasText;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.chip {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.version {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.chip.ok {
+  color: var(--good);
+}
+
+.capture {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.capture:hover {
+  border-color: color-mix(in srgb, CanvasText 30%, Canvas);
+}
+
+.capture[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.capture-label {
+  display: block;
+  font-weight: 600;
+}
+
+.capture-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.capture[aria-pressed="true"] .capture-detail {
+  color: var(--accent);
+}
+
+.facts {
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+}
+
+.facts > div {
+  display: contents;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+}
+
+.options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.port {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.port input {
+  width: 66px;
+  padding: 3px 6px;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: right;
+}
+
+.error {
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, Canvas);
+  border-radius: 6px;
+}
+
+.boot {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, Canvas);
+  border-radius: 6px;
+}
+
+.retry {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: color-mix(in srgb, CanvasText 30%, Canvas);
+}
+
+.checks {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.checks h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  color: var(--muted);
+}
+
+.checks ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks li {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.checks .verdict {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.checks li.ok .verdict {
+  color: var(--good);
+}
+
+.checks li.warn .verdict {
+  color: var(--warn);
+}
