@@ -691,3 +691,49 @@ final class MapLocalScenarioTests: XCTestCase {
     }
 }
 
+
+final class MapLocalScenarioAssignmentTests: XCTestCase {
+    @MainActor
+    func testEditorCheckboxesReplaceOnlyThisRulesMembership() {
+        let store = RuleStore()
+        let consultation = MapLocalRule(name: "consultation", url: "api.example.com/consultation/*")
+        let prescription = MapLocalRule(name: "prescription", url: "api.example.com/prescription/*")
+        store.addMapLocalRule(consultation)
+        store.addMapLocalRule(prescription)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [consultation.id]))
+        store.saveMapLocalScenario(MapLocalScenario(name: "lookup", ruleIDs: [prescription.id]))
+
+        // The checkboxes are the whole truth: checking "visit" adds the rule there and
+        // unchecking "lookup" removes it from that scenario.
+        store.setMapLocalScenarios([store.mapLocalScenarios[0].id], forRule: prescription.id)
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [consultation.id, prescription.id])
+        XCTAssertEqual(store.mapLocalScenarios[1].ruleIDs, [])
+
+        // Unchecking every scenario removes the rule from both.
+        store.setMapLocalScenarios([], forRule: prescription.id)
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [consultation.id])
+        XCTAssertEqual(store.mapLocalScenarios[1].ruleIDs, [])
+    }
+
+    @MainActor
+    func testNewScenarioNameExtendsAnExistingNameInsteadOfReplacingIt() {
+        let store = RuleStore()
+        let first = MapLocalRule(name: "first", url: "a.example.com/*")
+        let second = MapLocalRule(name: "second", url: "b.example.com/*")
+        store.addMapLocalRule(first)
+        store.addMapLocalRule(second)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [first.id]))
+
+        store.addRuleToScenario(second.id, named: "Visit")
+
+        XCTAssertEqual(store.mapLocalScenarios.count, 1, "a case-insensitive name match extends the scenario")
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [first.id, second.id])
+
+        store.addRuleToScenario(second.id, named: "  ")
+        XCTAssertEqual(store.mapLocalScenarios.count, 1, "a blank name creates nothing")
+
+        store.addRuleToScenario(second.id, named: "lookup")
+        XCTAssertEqual(store.mapLocalScenarios.map(\.name), ["visit", "lookup"])
+        XCTAssertEqual(store.mapLocalScenarios[1].ruleIDs, [second.id])
+    }
+}

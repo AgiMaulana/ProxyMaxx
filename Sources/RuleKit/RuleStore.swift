@@ -162,6 +162,39 @@ public final class RuleStore: ObservableObject {
         mapLocalScenarios.removeAll { $0.id == id }
     }
 
+    /// Replace one rule's scenario membership to exactly `ids`.
+    ///
+    /// Used by the rule editor: the checkboxes are the whole truth for this rule, so a
+    /// scenario not checked drops the rule and a checked one gains it. Other rules in
+    /// those scenarios are untouched.
+    public func setMapLocalScenarios(_ ids: Set<UUID>, forRule ruleID: UUID) {
+        for index in mapLocalScenarios.indices where ids.contains(mapLocalScenarios[index].id) != mapLocalScenarios[index].ruleIDs.contains(ruleID) {
+            if ids.contains(mapLocalScenarios[index].id) {
+                mapLocalScenarios[index].ruleIDs.append(ruleID)
+            } else {
+                mapLocalScenarios[index].ruleIDs.removeAll { $0 == ruleID }
+            }
+        }
+    }
+
+    /// Put a rule in the scenario with this name, adding the scenario when it is new.
+    /// A same-name scenario gains the rule rather than being replaced, so typing an
+    /// existing name in the editor extends it instead of overwriting its rule set.
+    @discardableResult
+    public func addRuleToScenario(_ ruleID: UUID, named name: String) -> MapLocalScenario? {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        if let index = mapLocalScenarios.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            if !mapLocalScenarios[index].ruleIDs.contains(ruleID) {
+                mapLocalScenarios[index].ruleIDs.append(ruleID)
+            }
+            return mapLocalScenarios[index]
+        }
+        let scenario = MapLocalScenario(name: name, ruleIDs: [ruleID])
+        mapLocalScenarios.append(scenario)
+        return scenario
+    }
+
     public func duplicateMapLocalRule(id: UUID) {
         guard let index = mapLocalRules.firstIndex(where: { $0.id == id }) else { return }
         var copy = mapLocalRules[index]

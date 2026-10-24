@@ -141,6 +141,13 @@
 "mapLocal.scenarioNameTitle" = "Name This Scenario";
 "mapLocal.scenarioNamePlaceholder" = "consultation flow";
 "mapLocal.scenarioHelp" = "Activating a scenario enables its rules and turns every other rule off.";
+"mapLocal.scenarioFormHelp" = "Group this rule in a scenario, or name a new one. Activating a scenario enables its rules and turns every other rule off.";
+"mapLocal.scenarioLabel" = "Scenario:";
+"mapLocal.scenarioNone" = "None";
+"mapLocal.scenarioNewOption" = "New Scenario…";
+"mapLocal.scenarioMultipleHint" = "This rule is in %lld scenarios. Choosing one here moves it into that scenario only.";
+"mapLocal.newScenarioPlaceholder" = "New scenario name";
+"mapLocal.newScenarioHint" = "Creates the scenario and adds this rule";
 "mapLocal.createTitle" = "Create Local Override Rule";
 "mapLocal.editTitle" = "Edit Local Override Rule";
 "mapLocal.formSubtitle" = "Configure URL matching and the mock response source";

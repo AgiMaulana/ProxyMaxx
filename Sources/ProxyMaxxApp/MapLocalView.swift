@@ -74,11 +74,24 @@ struct MapLocalView: View {
             Text("mapLocal.scenarioHelp")
         }
         .sheet(item: $editing) { target in
-            MapLocalEditorView(rule: target.rule, isNew: target.isNew) { saved in
+            MapLocalEditorView(
+                rule: target.rule,
+                isNew: target.isNew,
+                scenarios: rules.mapLocalScenarios
+            ) { saved, scenarioID, newScenarioName in
                 if target.isNew {
                     rules.addMapLocalRule(saved)
                 } else {
                     rules.updateMapLocalRule(saved)
+                }
+                // The dropdown picks one home for the rule. A new name creates that
+                // scenario first, then the rule moves into it like any other choice.
+                if let scenarioID {
+                    rules.setMapLocalScenarios([scenarioID], forRule: saved.id)
+                } else if let scenario = rules.addRuleToScenario(saved.id, named: newScenarioName) {
+                    rules.setMapLocalScenarios([scenario.id], forRule: saved.id)
+                } else {
+                    rules.setMapLocalScenarios([], forRule: saved.id)
                 }
                 selection = saved.id
                 onApply()
@@ -368,10 +381,26 @@ struct MapLocalView: View {
 
 /// The rule editor: name, matching rule, method, what to map to, and the response delay.
 struct MapLocalEditorView: View {
-    init(rule: MapLocalRule, isNew: Bool, onSave: @escaping (MapLocalRule) -> Void) {
+    /// What the scenario dropdown points at. `new` reveals a name field, and the rule is
+    /// put in that new scenario on save.
+    private enum ScenarioChoice: Hashable {
+        case none
+        case existing(UUID)
+        case new
+    }
+
+    init(
+        rule: MapLocalRule,
+        isNew: Bool,
+        scenarios: [MapLocalScenario] = [],
+        onSave: @escaping (MapLocalRule, UUID?, String) -> Void
+    ) {
         self.isNew = isNew
+        self.scenarios = scenarios
         self.onSave = onSave
         _draft = State(initialValue: rule)
+        let memberships = scenarios.filter { $0.ruleIDs.contains(rule.id) }
+        _scenarioChoice = State(initialValue: memberships.first.map { ScenarioChoice.existing($0.id) } ?? .none)
         let initialPath = rule.destination.path.isEmpty ? MapLocalView.generateDefaultFile() : rule.destination.path
         _path = State(initialValue: initialPath)
         _isDirectory = State(initialValue: !rule.destination.isFile)
@@ -390,13 +419,16 @@ struct MapLocalEditorView: View {
     }
 
     private let isNew: Bool
-    private let onSave: (MapLocalRule) -> Void
+    private let scenarios: [MapLocalScenario]
+    private let onSave: (MapLocalRule, UUID?, String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MapLocalRule
     @State private var path: String
     @State private var isDirectory: Bool
     @State private var responseContent: String
+    @State private var scenarioChoice: ScenarioChoice
+    @State private var newScenarioName = ""
 
     private static let methods = ["", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"]
 
@@ -559,6 +591,55 @@ struct MapLocalEditorView: View {
                 .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                 .cornerRadius(8)
                 .frame(maxHeight: .infinity)
+
+                // Scenario membership as one dropdown: none, an existing scenario, or a
+                // new one named inline. Choosing one moves the rule into it.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("mapLocal.scenarios")
+                        .font(.headline)
+                    Text("mapLocal.scenarioFormHelp")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                        GridRow {
+                            Text("mapLocal.scenarioLabel")
+                                .gridColumnAlignment(.trailing)
+                            Picker("", selection: $scenarioChoice) {
+                                Text("mapLocal.scenarioNone").tag(ScenarioChoice.none)
+                                ForEach(scenarios) { scenario in
+                                    Text(scenario.displayName).tag(ScenarioChoice.existing(scenario.id))
+                                }
+                                Text("mapLocal.scenarioNewOption").tag(ScenarioChoice.new)
+                            }
+                            .labelsHidden()
+                            .frame(width: 240)
+                        }
+
+                        if scenarioChoice == .new {
+                            GridRow {
+                                Text("").gridColumnAlignment(.trailing)
+                                HStack(spacing: 8) {
+                                    TextField("mapLocal.newScenarioPlaceholder", text: $newScenarioName)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 240)
+                                    Text("mapLocal.newScenarioHint")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    if membershipCount > 1 {
+                        Text(L10n.format("mapLocal.scenarioMultipleHint", membershipCount))
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(12)
+                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                .cornerRadius(8)
             }
             .padding(16)
 
@@ -571,11 +652,20 @@ struct MapLocalEditorView: View {
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? L10n.string("mapLocal.addRule") : L10n.string("mapLocal.saveChanges")) { save() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(draft.url.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(
+                        draft.url.trimmingCharacters(in: .whitespaces).isEmpty
+                        || (scenarioChoice == .new && newScenarioName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    )
             }
             .padding(16)
         }
-        .frame(minWidth: 720, idealWidth: 840, maxWidth: .infinity, minHeight: 620, idealHeight: 780, maxHeight: .infinity)
+        .frame(minWidth: 720, idealWidth: 840, maxWidth: .infinity, minHeight: 620, idealHeight: 840, maxHeight: .infinity)
+    }
+
+    /// Scenarios currently containing the rule, so the editor can admit when the
+    /// dropdown is showing only the first of several (CLI and capture can overlap them).
+    private var membershipCount: Int {
+        scenarios.filter { $0.ruleIDs.contains(draft.id) }.count
     }
 
     @ViewBuilder
@@ -645,7 +735,14 @@ struct MapLocalEditorView: View {
             try? responseContent.write(toFile: expanded, atomically: true, encoding: .utf8)
         }
         draft.destination = isDirectory ? .directory(trimmedPath) : .file(trimmedPath)
-        onSave(draft)
+        switch scenarioChoice {
+        case .none:
+            onSave(draft, nil, "")
+        case .existing(let scenarioID):
+            onSave(draft, scenarioID, "")
+        case .new:
+            onSave(draft, nil, newScenarioName)
+        }
         dismiss()
     }
 }
