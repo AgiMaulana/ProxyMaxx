@@ -1,0 +1,52 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    name: Publish website
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage existing project artwork
+        run: |
+          mkdir -p _site/assets/screenshots
+          cp site/index.html site/styles.css site/script.js site/.nojekyll _site/
+          cp Resources/icons/AppIcon.svg _site/assets/app-icon.svg
+          cp docs/cover.png _site/assets/cover.png
+          cp docs/screenshots/mac-app-proxy-served-on-the-app.png _site/assets/screenshots/
+          cp docs/screenshots/mac-app-local-override-list.png _site/assets/screenshots/
+          cp docs/screenshots/mac-app-android-emulator-setup-guide-in-one-click.png _site/assets/screenshots/
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

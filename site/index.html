@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ProxyMaxx is a free, open-source HTTP and HTTPS debugging proxy for macOS. Inspect traffic, decrypt TLS, debug WebSockets, and map local responses.">
+  <meta name="theme-color" content="#0b1423">
+  <meta property="og:title" content="ProxyMaxx | HTTP/HTTPS debugging proxy for macOS">
+  <meta property="og:description" content="A native, free and open-source HTTP/HTTPS debugging proxy for macOS.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://agimaulana.github.io/ProxyMaxx/">
+  <meta property="og:image" content="https://agimaulana.github.io/ProxyMaxx/assets/cover.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>ProxyMaxx | HTTP/HTTPS debugging proxy for macOS</title>
+  <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=2">
+  <script src="script.js?v=2" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <nav class="nav shell" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="ProxyMaxx home">
+        <img src="assets/app-icon.svg" alt="" width="36" height="36">
+        <span>ProxyMaxx</span>
+      </a>
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button>
+      <div class="nav-links" id="nav-links">
+        <a href="#features">Features</a>
+        <a href="#local-override">Local Override</a>
+        <a href="#companions">Companions</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/AgiMaulana/ProxyMaxx">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" id="top">
+      <div class="hero-copy">
+        <p class="kicker">Native macOS network debugger</p>
+        <h1>See exactly what your apps send.</h1>
+        <p class="lede">ProxyMaxx intercepts HTTP and HTTPS traffic, decrypts TLS, records WebSocket frames, and lets you inspect each request without a licence key, paid tier, or account.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/AgiMaulana/ProxyMaxx/releases/latest">Download for macOS</a>
+          <a class="button secondary" href="#install">Install with Homebrew</a>
+        </div>
+        <ul class="facts" aria-label="Project facts">
+          <li>Free</li>
+          <li>MIT licensed</li>
+          <li>macOS 14+</li>
+          <li>Native Swift</li>
+        </ul>
+      </div>
+      <figure class="hero-shot window-frame">
+        <img src="assets/screenshots/mac-app-proxy-served-on-the-app.png" alt="ProxyMaxx showing the live traffic table and flow inspector" width="3024" height="1964" fetchpriority="high">
+      </figure>
+    </section>
+
+    <section class="signal-strip" aria-label="Core capabilities">
+      <div class="shell signal-list">
+        <span>HTTP/HTTPS interception</span>
+        <span>TLS decryption</span>
+        <span>WebSocket inspection</span>
+        <span>Local responses</span>
+        <span>Headless CLI</span>
+      </div>
+    </section>
+
+    <section class="section shell intro" id="features">
+      <div class="section-heading">
+        <p class="kicker">Traffic inspection</p>
+        <h2>A debugger built around the flow.</h2>
+      </div>
+      <div class="intro-copy">
+        <p>The live table keeps method, status, host, path, size, duration, and client visible. Select a row to read request and response headers, formatted or raw bodies, timings, and decryption state.</p>
+        <dl class="feature-list">
+          <div><dt>HTTPS MITM</dt><dd>A local root CA signs per-host certificates for traffic you choose to decrypt.</dd></div>
+          <div><dt>WebSockets</dt><dd>Text, binary, and control frames stay attached to the upgrade flow.</dd></div>
+          <div><dt>Copy as cURL</dt><dd>Reproduce any captured request from the inspector or table context menu.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section local-section" id="local-override">
+      <div class="shell split">
+        <div class="split-copy">
+          <p class="kicker">Local Override</p>
+          <h2>Swap the server response without changing app code.</h2>
+          <p>Match a URL by contains, wildcard, regular expression, or exact value. Serve a file or directory, add a delay, and group rules into scenarios such as an empty cart or a server error.</p>
+          <ul class="plain-list">
+            <li>First matching rule wins</li>
+            <li>Missing local files fall through to the remote server</li>
+            <li>Scenario activation switches a complete test state at once</li>
+          </ul>
+        </div>
+        <figure class="window-frame local-shot">
+          <img src="assets/screenshots/mac-app-local-override-list.png" alt="Local Override rules grouped by endpoint and scenario" width="2200" height="1320" loading="lazy">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section shell companions" id="companions">
+      <div class="section-heading companions-heading">
+        <p class="kicker">Beyond the Mac</p>
+        <h2>Capture browsers, emulators, and devices.</h2>
+        <p>A SOCKS5 listener, Chromium extension, and Android setup guide route traffic into the same inspector.</p>
+      </div>
+      <div class="companion-layout">
+        <figure class="window-frame guide-shot">
+          <img src="assets/screenshots/mac-app-android-emulator-setup-guide-in-one-click.png" alt="Android Emulator Setup Guide in ProxyMaxx" width="3024" height="1964" loading="lazy">
+        </figure>
+        <div class="companion-copy">
+          <article>
+            <h3>Android setup in one click</h3>
+            <p>Install the CA as a system certificate, set the emulator proxy, and launch the bundled tunnel. Google APIs and Google Play emulator images are supported.</p>
+          </article>
+          <article>
+            <h3>Chromium companion</h3>
+            <p>Apply the proxy through <code>chrome.proxy</code> and see which capture blocker remains, including CA trust, loopback, HTTP/3, or a foreign proxy owner.</p>
+          </article>
+          <article>
+            <h3>Scriptable engine</h3>
+            <p><code>proxymaxx-cli</code> serves the proxy, lists captured flows with filters, and stops a detached session from shell scripts or agents.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section install-section" id="install">
+      <div class="shell install-layout">
+        <div>
+          <p class="kicker">Install</p>
+          <h2>Run ProxyMaxx on macOS 14 or later.</h2>
+          <p>Homebrew is the shortest path. The tap's cask clears the quarantine attribute so the app opens without a Gatekeeper warning.</p>
+          <p class="install-note">Prefer a disk image? Download the latest release, drag ProxyMaxx to Applications, then follow the release notes for the one-time quarantine command.</p>
+        </div>
+        <div class="command-card">
+          <div class="command-heading">
+            <span>Terminal</span>
+            <button class="copy-button" type="button" data-copy-target="install-command">Copy commands</button>
+          </div>
+          <pre id="install-command"><code>brew tap agimaulana/proxymaxx
+brew trust --tap agimaulana/proxymaxx
+brew install --cask agimaulana/proxymaxx/proxymaxx</code></pre>
+          <p class="copy-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer shell">
+    <div>
+      <a class="brand" href="#top"><img src="assets/app-icon.svg" alt="" width="32" height="32"><span>ProxyMaxx</span></a>
+      <p>Free and open source under the MIT licence.</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/AgiMaulana/ProxyMaxx">Source</a>
+      <a href="https://github.com/AgiMaulana/ProxyMaxx/releases/latest">Releases</a>
+      <a href="https://github.com/AgiMaulana/ProxyMaxx/issues">Issues</a>
+      <a href="https://github.com/AgiMaulana/ProxyMaxx/blob/main/LICENSE">Licence</a>
+    </div>
+  </footer>
+</body>
+</html>
