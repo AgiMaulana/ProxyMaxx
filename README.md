@@ -107,7 +107,7 @@ sockets (chat, huddles, live updates) keep working through the proxy. Text, bina
 control frames are recorded on the upgrade flow and listed in the inspector; payloads
 compressed by `permessage-deflate` are forwarded untouched and shown as hex.
 
-### Map Local
+### Local Override
 
 Answer a matched request from a local file or directory instead of the network. A file is
 served either as a whole HTTP/1.x message (status, headers and body) or as a plain body with
@@ -117,7 +117,17 @@ Exact, optionally filtered by method, and can delay the response. Rules are eval
 bottom and the first match wins. A rule whose file or directory is gone falls through to the
 remote server.
 
-![The Create Map Local Rule sheet, with the matching rule fields on top and the local file and response body below](docs/screenshots/mac-app-local-map-create-form.png)
+Rules are grouped by **scenario**: a named set of rules standing in for a test situation such
+as "empty cart" or "server error". Activation is exclusive — activating a scenario turns its
+rules on and every other rule off — and a scenario is a tag, so one rule (a login stub, a
+feature flag) can belong to several of them. Browsing a scenario in the sidebar only filters
+the list; activation is its own button. Flipping a member switch by hand turns the pill amber
+as "modified" until you reset or turn the scenario off, and a scenario keeps at most one rule
+per endpoint: adding a second asks first, then swaps it with an undo.
+
+![The Local Override window, with the scenario sidebar on the left and the rule table grouped by endpoint](docs/screenshots/mac-app-local-override-list.png)
+
+![The Create rule form, with the scenario chip field under the matching rule and the mock response below](docs/screenshots/mac-app-local-override-create-rule.png)
 
 ### Certificates and system proxy
 
@@ -185,9 +195,9 @@ Compose, Diff, GraphQL/Protobuf, HTTP/2, HAR import/export, MCP server.
 
 4. Traffic appears in the table; select a row to inspect it.
 5. Add hosts to **SSL Proxying → Exclude** to leave their TLS untouched.
-6. Open **Map Local** or press Cmd+L to answer matched URLs from a local file or directory.
+6. Open **Local Override** (Cmd+L) to answer matched URLs from a local file or directory.
    Add a rule, set its URL and matching style, then pick the file or directory under
-   **Map To**.
+   **Mock response**; group rules in a scenario to switch whole test situations at once.
 
 The app's menu holds the rest: **Command Line Tool…**, **Install Browser Extension…**,
 **Open Android Emulator Guide** and **Open Android Device Guide**.

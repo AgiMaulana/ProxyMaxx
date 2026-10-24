@@ -103,7 +103,7 @@ enum RulesCommand {
         try requireReadable(rule.destination.path)
 
         if RuleCommand.appOwned() {
-            rule = try await RuleCommand.deliver(.add, rule: rule) ?? rule
+            rule = try await RuleCommand.deliver(.add, rule: rule)?.rule ?? rule
         } else {
             let url = RuleCommand.resolveRulesFile(arguments)
             var file = RuleFile.load(from: url)
@@ -130,7 +130,7 @@ enum RulesCommand {
         if !rule.destination.path.isEmpty { try requireReadable(rule.destination.path) }
 
         if RuleCommand.appOwned() {
-            rule = try await RuleCommand.deliver(.update, rule: rule) ?? rule
+            rule = try await RuleCommand.deliver(.update, rule: rule)?.rule ?? rule
         } else {
             file.mapLocalRules[index] = rule
             try file.write(to: path)

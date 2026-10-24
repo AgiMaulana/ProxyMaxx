@@ -118,6 +118,27 @@ proxymaxx-cli rule move    --id UUID --by (-1|1 ...)
 proxymaxx-cli rule clear
 ```
 
+### Named test scenarios
+
+A scenario is a name for a set of Map Local rules, so one command sets up a whole test run.
+Activation is exclusive: the scenario's rules turn on and every other rule turns off, which
+keeps a leftover rule from answering a request the test did not expect.
+
+```sh
+proxymaxx-cli scenario create --name "visit flow" \
+    --include consultation,prescription,follow-up
+proxymaxx-cli scenario activate "visit flow"
+proxymaxx-cli scenario list --text
+proxymaxx-cli scenario delete "visit flow"
+```
+
+`--include` takes rule names, URL patterns or ids, comma separated. `--rules PATH` still
+names the rule file on every scenario command. A scenario stores ids, so renaming a rule
+keeps it in the set, and a rule deleted since capture is skipped with a warning instead of
+failing the activation. Scenarios are saved in `rules.json` beside the rules; the Map Local
+window lists them in its **Scenarios** menu, and **Save Enabled Rules as Scenario…** captures
+the current switchboard there.
+
 `rules map-local create` and `update` take the response source and its shape:
 
 ```sh

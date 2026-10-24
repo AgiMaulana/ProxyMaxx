@@ -126,6 +126,63 @@ public struct MapLocalRule: Identifiable, Codable, Hashable, Sendable {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? url : trimmed
     }
+
+    /// What the rule answers: its method and URL pattern. Scenarios use this to keep one
+    /// rule per endpoint, so two answers for the same requests cannot race.
+    public var endpoint: MapLocalEndpoint {
+        MapLocalEndpoint(method: method.displayName, pattern: url.trimmingCharacters(in: .whitespaces))
+    }
+}
+
+/// The method-and-pattern pair that identifies an endpoint in the rule list.
+///
+/// Match style and destination are not part of the identity: they change how the answer
+/// is produced, not which requests the rule claims.
+public struct MapLocalEndpoint: Hashable, Sendable {
+    public let method: String
+    public let pattern: String
+
+    public init(method: String, pattern: String) {
+        self.method = method
+        self.pattern = pattern
+    }
+
+    /// The grouping header, for example `GET consultation/*`.
+    public var label: String {
+        pattern.isEmpty ? method : "\(method) \(pattern)"
+    }
+
+    /// Stable identity for dictionaries and section identifiers.
+    public var key: String { "\(method)\u{1F}\(pattern)" }
+}
+
+/// Names for rules that were saved with an empty name field.
+///
+/// The form shows "Untitled Rule" as a placeholder rather than prefilling it, so the list
+/// gets a real, unique name when the rule is created.
+public enum MapLocalRuleNaming {
+    public static func untitled(existingNames: [String]) -> String {
+        let base = String(localized: "mapLocal.untitledRule", defaultValue: "Untitled Rule")
+        let taken = Set(existingNames.map(normalized))
+        guard taken.contains(normalized(base)) else { return base }
+
+        var number = 2
+        while taken.contains(normalized(numbered(base, number))) {
+            number += 1
+        }
+        return numbered(base, number)
+    }
+
+    private static func numbered(_ base: String, _ number: Int) -> String {
+        String(
+            format: String(localized: "mapLocal.untitledRuleNumbered", defaultValue: "Untitled Rule %lld"),
+            number
+        )
+    }
+
+    private static func normalized(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespaces).lowercased()
+    }
 }
 
 /// The delay choices ProxyMaxx offers in the editor.

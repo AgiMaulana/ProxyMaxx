@@ -173,6 +173,7 @@ final class CommandIPCTests: XCTestCase {
             .init(op: .setSSLProxying, list: "exclude", pattern: "*.apple.com", add: true),
             .init(op: .update, rule: MapLocalRule(url: "example.com/*", destination: .file("/tmp/x.json"))),
             .init(op: .clearSession),
+            .init(op: .addScenario, scenario: MapLocalScenario(name: "visit", ruleIDs: [UUID()])),
         ]
         for message in messages {
             let data = try ProxyRegistry.encoder.encode(message)
@@ -184,7 +185,30 @@ final class CommandIPCTests: XCTestCase {
             XCTAssertEqual(decoded.pattern, message.pattern)
             XCTAssertEqual(decoded.add, message.add)
             XCTAssertEqual(decoded.rule, message.rule)
+            XCTAssertEqual(decoded.scenario, message.scenario)
         }
+    }
+
+    /// A scenario read answers with the app's live store, which is what lets
+    /// `scenario create` followed by `scenario activate` work before the app's
+    /// debounced autosave has reached the rule file.
+    func testScenarioSnapshotRoundTrip() throws {
+        let rule = MapLocalRule(name: "consultation", url: "api.example.com/consultation/*")
+        let scenario = MapLocalScenario(name: "visit", ruleIDs: [rule.id])
+        let result = CommandIPC.Result(
+            id: "snapshot",
+            ok: true,
+            applied: 1,
+            scenarios: [scenario],
+            rules: [rule]
+        )
+        let decoded = try ProxyRegistry.decoder.decode(
+            CommandIPC.Result.self,
+            from: ProxyRegistry.encoder.encode(result)
+        )
+        XCTAssertEqual(decoded.scenarios, [scenario])
+        XCTAssertEqual(decoded.rules, [rule])
+        XCTAssertEqual(decoded.applied, 1)
     }
 }
 

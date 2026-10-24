@@ -117,6 +117,17 @@ enum Help {
                            [--input PATH|-]; update also needs the rule id positionally.
                            Other tools answer with an `unsupported` envelope.
 
+      proxymaxx-cli scenario list [--rules PATH] [--text]
+      proxymaxx-cli scenario show <name|id>
+      proxymaxx-cli scenario create --name NAME --include RULE[,RULE...]
+      proxymaxx-cli scenario delete <name|id>
+      proxymaxx-cli scenario activate <name|id>
+                           Named sets of Map Local rules. A scenario stores rule ids, so
+                           renaming a rule keeps it in the set; activating is exclusive:
+                           the scenario's rules turn on and every other rule turns off,
+                           giving one reproducible setup for a test run. --include takes
+                           rule names, URLs or ids, comma separated.
+
       proxymaxx-cli rule list      [--rules PATH] [--text]
       proxymaxx-cli rule add       --url PATTERN --file PATH [--method M] [--name NAME]
                                   [--style contains|wildcard|regex|exact] [--host-only]
