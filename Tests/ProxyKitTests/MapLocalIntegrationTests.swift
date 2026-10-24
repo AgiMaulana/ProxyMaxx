@@ -85,6 +85,32 @@ final class MapLocalIntegrationTests: XCTestCase {
         XCTAssertEqual(result.output, "first")
     }
 
+    func testScenarioActivationChangesTheResponseServedByTheProxy() throws {
+        let plain = try startPlainProxy(originBody: "from-origin")
+        defer { plain.stop() }
+
+        let visitFile = try writeFile("visit", name: "visit.txt")
+        let emptyCartFile = try writeFile("empty-cart", name: "empty-cart.txt")
+        var rules = [
+            pathRule("/mapped", name: "consult-ok", destination: .file(visitFile.path)),
+            pathRule("/mapped", name: "consult-empty", destination: .file(emptyCartFile.path)),
+        ]
+        let visit = MapLocalScenario(name: "visit", ruleIDs: [rules[0].id])
+        let emptyCart = MapLocalScenario(name: "empty-cart", ruleIDs: [rules[1].id])
+
+        XCTAssertEqual(MapLocalScenarioRunner.activate(visit, in: &rules), 1)
+        plain.engine.mapLocalRules = rules
+        let visitResult = try curlThroughProxy(plain.engine, url: "http://127.0.0.1:\(plain.port)/mapped")
+        XCTAssertEqual(visitResult.output, "visit")
+        XCTAssertEqual(rules.map(\.isEnabled), [true, false])
+
+        XCTAssertEqual(MapLocalScenarioRunner.activate(emptyCart, in: &rules), 1)
+        plain.engine.mapLocalRules = rules
+        let emptyCartResult = try curlThroughProxy(plain.engine, url: "http://127.0.0.1:\(plain.port)/mapped")
+        XCTAssertEqual(emptyCartResult.output, "empty-cart")
+        XCTAssertEqual(rules.map(\.isEnabled), [false, true])
+    }
+
     func testFullHTTPMessageFileIsServedWithItsStatusAndHeaders() throws {
         let plain = try startPlainProxy(originBody: "from-origin")
         defer { plain.stop() }
