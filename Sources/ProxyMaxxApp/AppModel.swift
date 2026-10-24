@@ -611,7 +611,7 @@ final class AppModel: ObservableObject {
             androidSerial = nil
         }
         if androidSerial == nil {
-            androidSerial = androidDevices.first(where: { $0.isEmulator })?.serial ?? androidDevices.first?.serial
+            androidSerial = AndroidToolchain.preferredDevice(in: androidDevices)?.serial
         }
     }
 

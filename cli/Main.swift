@@ -37,6 +37,8 @@ struct ProxyMaxxCLI {
                 try await RulesCommand.run(arguments.after(command))
             case "cert":
                 try await CertCommand.run(arguments.after(command))
+            case "android":
+                try await AndroidCommand.run(arguments.after(command))
             case "proxy":
                 try await ToolCommand.proxy(arguments.after(command))
             case "proxy-host":
