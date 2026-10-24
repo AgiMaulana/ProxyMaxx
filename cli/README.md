@@ -133,11 +133,55 @@ Certificates and transfer:
 
 ```sh
 proxymaxx-cli cert status | install | uninstall | export --out PATH
+proxymaxx-cli android devices
+proxymaxx-cli android prepare [--serial S] [--mode auto|google-apis|manual]
+                              [--magisk|--no-magisk] [--include-physical]
+proxymaxx-cli android revert  [--serial S] [--magisk|--no-magisk] [--include-physical]
 proxymaxx-cli export --output PATH [--mode all|enabledRules]
 proxymaxx-cli import --input  PATH [--mode append|override]
 ```
 
 Short options (`-o`, `-i`, `-m`) work alongside the long ones.
+
+## Android setup
+
+`android prepare` is the CLI form of the app's one-click emulator guide: it installs the
+root CA as a system certificate, configures interception, and installs and launches the
+tunnel app. It runs the same bundled installer script with the same arguments, so a device
+prepared here is indistinguishable from one prepared in the window.
+
+```sh
+# The tunnel reaches the proxy over SOCKS5, so give the engine a SOCKS listener.
+proxymaxx-cli serve --detach --socks-port 8989
+
+# Pick the first emulator (or name one) and prepare it. Logs go to stderr.
+proxymaxx-cli android prepare
+proxymaxx-cli android prepare --serial emulator-5554 --mode auto
+
+# Undo: clear the proxy, remove the certificate and tunnel, restore a Magisk AVD.
+proxymaxx-cli android revert --serial emulator-5554
+```
+
+`prepare` targets the first emulator when `--serial` is omitted, else the first attached
+device, the same choice the guide makes. It needs a running engine (the app's or
+`serve`'s), because the tunnel and the device proxy point at it; with no engine it fails
+with the command to start one. When the tunnel APK is bundled, the engine must also have a
+SOCKS5 listener, since the installer skips the device's HTTP proxy in that case. A build
+without the tunnel APK still installs the certificate and sets the HTTP proxy. A real phone
+is only changed with `--include-physical`, even when `--serial` names it.
+
+The route matches the guide:
+
+| `--mode` | What runs |
+|----------|-----------|
+| `auto` (default) | `adb root` on a Google APIs image; the bundled Magisk route on a Play AVD when `--magisk` is allowed |
+| `google-apis` | Only the `adb root` path; an unrootable AVD is reported, never patched |
+| `manual` | Prints the exact installer command in `commandLine`; touches nothing |
+
+`--magisk` is on by default, matching the app's toggle; `--no-magisk` restricts the run to
+`adb root`. Revert uses `--no-magisk` the same way, skipping the Magisk restore. Each
+command prints one JSON object (`action`, `ok`, `serial`, ports, `magisk`, `tunnel`, `log`)
+and streams the installer's own log to stderr with a `[proxymaxx-cli] android:` prefix.
 
 ## JSON envelope
 
@@ -210,7 +254,10 @@ mistake a missing feature for a crash. Each answers with an `unsupported` envelo
 - `serve` starts a fresh session; the previous `session.ndjson` is replaced. Read what you need
   before starting another engine.
 - `cert install` adds the local root CA to the user trust domain, with no admin prompt. Check
-  `cert status` before expecting HTTPS flows to decrypt.
+  `cert status` before expecting HTTPS flows to decrypt. The Android command does not need
+  this: it installs the CA on the device, and root is obtained there, not on the Mac.
+- `android prepare` leaves the engine running; `proxymaxx-cli stop` stops it when the
+  session is over.
 - The CLI never touches the macOS system proxy. Point clients at the port yourself, with
   `http_proxy`/`https_proxy`, an emulator, or the app's toggle.
 - Rules are shared with the app. Editing `rules.json` by hand while the app owns the engine

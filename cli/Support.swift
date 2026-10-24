@@ -130,6 +130,23 @@ enum Help {
       proxymaxx-cli export --output PATH [--mode all|enabledRules]
       proxymaxx-cli import --input  PATH [--mode append|override]
       proxymaxx-cli cert status | cert install | cert uninstall | cert export --out PATH
+
+      proxymaxx-cli android devices
+      proxymaxx-cli android prepare [--serial S] [--mode auto|google-apis|manual]
+                                   [--magisk|--no-magisk] [--include-physical]
+                           One-click emulator setup from the shell: install the root CA as a
+                           system certificate, point the device at the running proxy (or
+                           its tunnel), and install and launch the tunnel app. Uses
+                           `adb root` on Google APIs images; on a Google Play AVD the
+                           bundled, consent-based Magisk route does the rooting. Needs a
+                           running engine with a SOCKS5 listener when the tunnel APK is
+                           bundled. --mode manual prints the exact installer command and
+                           touches nothing.
+      proxymaxx-cli android revert  [--serial S] [--magisk|--no-magisk]
+                                    [--include-physical]
+                           Clear the proxy, remove the certificate and tunnel app, and
+                           return a Magisk-patched AVD to its stock boot.
+
       proxymaxx-cli paths
 
     All rule commands read and write the same JSON file the app uses, so settings made

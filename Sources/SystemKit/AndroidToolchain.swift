@@ -77,6 +77,12 @@ public enum AndroidToolchain {
         return parseDevices(result.output)
     }
 
+    /// The device to act on when none is named: the first emulator, else the first
+    /// attached device. The guide and the CLI both use this, so they target the same one.
+    public static func preferredDevice(in devices: [AndroidDevice]) -> AndroidDevice? {
+        devices.first(where: \.isEmulator) ?? devices.first
+    }
+
     /// Parse `adb devices -l` output. Split out so it can be tested without a device.
     static func parseDevices(_ output: String) -> [AndroidDevice] {
         var devices: [AndroidDevice] = []

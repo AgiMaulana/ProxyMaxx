@@ -60,6 +60,18 @@ final class AndroidInstallerTests: XCTestCase {
         XCTAssertTrue(AndroidToolchain.parseDevices("List of devices attached\n\n").isEmpty)
     }
 
+    /// With no `--serial`, the guide and the CLI target the same device: an emulator wins
+    /// over a phone, and the first of whichever kind it is.
+    func testPreferredDevicePrefersTheFirstEmulator() {
+        let phone = AndroidDevice(serial: "R58M12ABCDE", model: "SM G973F")
+        let firstEmulator = AndroidDevice(serial: "emulator-5554", model: "sdk gphone64 arm64")
+        let secondEmulator = AndroidDevice(serial: "emulator-5556", model: "sdk gphone64 arm64")
+
+        XCTAssertEqual(AndroidToolchain.preferredDevice(in: [phone, firstEmulator, secondEmulator]), firstEmulator)
+        XCTAssertEqual(AndroidToolchain.preferredDevice(in: [phone]), phone)
+        XCTAssertNil(AndroidToolchain.preferredDevice(in: []))
+    }
+
     /// An emulator always reaches its host at 10.0.2.2; a real device cannot use that address.
     func testEmulatorsGetTheEmulatorHostAddress() {
         XCTAssertEqual(AndroidToolchain.hostAddress(forEmulator: true), "10.0.2.2")
