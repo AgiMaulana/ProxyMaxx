@@ -1,92 +1,78 @@
-# ProxyMaxx Community Source License
+# ProxyMaxx Source-Available License
 
-**Version 2.0 — effective 2026-10-23**
+**Version 2.0 (revised draft) - effective \[DATE\]**
 
-Copyright © 2026 Agi Maulana. All rights reserved.
+Copyright (c) 2026 Agi Maulana. All rights reserved.
 
-> **Prior versions.** Versions of ProxyMaxx distributed under the MIT License before
-> version 2.0 — including release tag `v0.1.0` — remain available under the MIT License
-> for every copy of those versions obtained while that license applied, and those grants
-> cannot be withdrawn. This License governs version 2.0 and later only.
+> **Not Open Source.** This is a source-available license. It does not meet the Open Source Definition published by the Open Source Initiative, and ProxyMaxx version 2.0 and later should not be described as "open source."
+
+> **Prior versions.** Versions of ProxyMaxx distributed under the MIT License before version 2.0, including release tag `v0.1.0`, remain available under the MIT License for every copy of those versions obtained while that license applied, and those grants cannot be withdrawn. This License governs version 2.0 and later only.
 
 ## 1. Definitions
 
 For purposes of this License:
 
-**1.1. "Licensor"** means Agi Maulana or another person or entity that is legally
-authorized to grant the applicable rights to the Software.
+**1.1. "Licensor"** means Agi Maulana or another person or entity that is legally authorized to grant the applicable rights to the Software.
 
-**1.2. "Software"** means the ProxyMaxx software, source code, object code,
-documentation, and other materials that the Licensor expressly makes available under this
-License.
+**1.2. "Software"** means the ProxyMaxx software, source code, object code, documentation, and other materials that the Licensor expressly makes available under this License. The Software does not include third-party components governed by separate licenses (see Section 6).
 
-**1.3. "Original Software"** means the Software as distributed by the Licensor, excluding
-third-party components governed by separate licenses.
+**1.3. "Original Software"** means the Software as distributed by the Licensor, or as redistributed in an exact, unmodified copy permitted by Section 2(e).
 
-**1.4. "Modification"** means an alteration, adaptation, translation, extension, or other
-derivative work of the Software, to the extent recognized under applicable copyright law.
+**1.4. "Modification"** means an alteration, adaptation, translation, extension, or other derivative work of the Software, to the extent recognized under applicable copyright law.
 
-**1.5. "Patch"** means a separately distributable file or set of files, such as a diff or
-patch file, that modifies the Original Software. To qualify as a Patch under this License,
-the file or set of files must, with respect to the Original Software:
+**1.5. "Patch"** means a separately distributable file or set of files, such as a diff or patch file, that modifies the Original Software. To qualify as a Patch under this License, the file or set of files must, with respect to the Original Software:
 
 (a) not be capable of functioning, compiling, or executing on its own;
 
-(b) require the recipient to independently obtain the Original Software from the Licensor;
-and
+(b) require the recipient to separately obtain the Original Software, either from the Licensor or as an exact, unmodified copy distributed under Section 2(e); and
 
-(c) not reproduce any complete original source file, nor enough files to reconstitute the
-Software or a substantial portion of it.
+(c) not reproduce any complete original source file, nor enough of the Original Software to reconstitute the Software or a substantial portion of it.
 
-A file or set of files that fails any of (a), (b), or (c) is not a Patch, and its
-distribution requires separate written permission from the Licensor.
+For clarity: (i) diff hunks may include a reasonable amount of surrounding context lines from the Original Software; (ii) new files that you wrote entirely yourself and that contain no Original Software code may be included in a Patch; and (iii) a Patch may be hosted in the same repository or download location as an exact copy of the Original Software under Section 2(e), provided the Patch is kept in separate files and the combination is not distributed as a ready-to-use modified build.
 
-**1.6. "Internal Use"** means use of the Software by an individual or organization for its
-own development, testing, debugging, security analysis, evaluation, or internal business
-operations. Internal Use includes use by a commercial organization for its own employees
-and internal workflows, provided that the Software is not thereby incorporated into or
-made available as a component of a product or service offered to third parties.
+A file or set of files that fails any of (a), (b), or (c) is not a Patch, and its distribution requires separate written permission from the Licensor.
 
-**1.7. "Third Party"** means any person or entity other than the relevant user and the
-individuals acting on that user's behalf within the scope of authorized Internal Use.
+**1.6. "Affiliate"** means an entity that controls, is controlled by, or is under common control with another entity, where "control" means ownership of more than fifty percent of the voting interests or the power to direct management.
 
-**1.8. "Commercial Product"** means a product, application, developer tool, platform,
-hosted service, or other offering that is sold, licensed, provided through a paid
-subscription, monetized through advertising, or otherwise commercially exploited.
+**1.7. "Internal Use"** means use of the Software by an individual or organization, and by its Affiliates, employees, and Contractors acting on its behalf, for its own development, testing, debugging, security analysis, evaluation, or internal business operations. Internal Use includes use by a commercial organization for its own employees and internal workflows, provided that the Software is not thereby incorporated into or made available as a component of a product or service offered to Third Parties.
 
-**1.9. "Commercial Incorporation"** means any of the following activities involving the
-Software or a Modification:
+**1.8. "Contractor"** means an individual or entity engaged to perform work for another party, including consultants, QA vendors, and security firms, to the extent that the Contractor uses the Software solely to perform that work for that party and not to provide the Software's functionality to anyone else.
+
+**1.9. "Third Party"** means any person or entity other than the relevant user, its Affiliates, and the individuals and Contractors acting on that user's behalf within the scope of authorized Internal Use.
+
+**1.10. "Commercial Product"** means a product, application, developer tool, platform, hosted service, or other offering that is sold, licensed, provided through a paid subscription, monetized through advertising, or otherwise commercially exploited.
+
+**1.11. "Commercial Incorporation"** means any of the following activities involving the Software or a Modification:
 
 (a) embedding, bundling, or distributing the Software as part of a Commercial Product;
 
-(b) incorporating the Software or a Modification into software, infrastructure, or a
-service made available to Third Parties;
+(b) incorporating the Software or a Modification into software, infrastructure, or a service that is a Commercial Product or is made available to Third Parties for consideration;
 
-(c) operating a hosted or software-as-a-service offering for Third Parties where the
-Software or a Modification is incorporated into or forms part of the offering's
-functionality;
+(c) operating a hosted or software-as-a-service offering for Third Parties where the Software or a Modification is incorporated into or forms part of the offering's functionality;
 
-(d) sublicensing, selling, or otherwise commercially exploiting the Software or a
-Modification as a component of a Commercial Product; or
+(d) sublicensing, selling, or otherwise commercially exploiting the Software or a Modification as a component of a Commercial Product; or
 
-(e) providing access to the Software's functionality via an API, CLI, or CI/CD pipeline to
-a Third Party; or operating the Software inside infrastructure that serves a Third Party's
-requests.
+(e) in the course of operating a Commercial Product or for consideration, providing access to the Software's functionality to a Third Party via an API, CLI, or CI/CD pipeline, or operating the Software inside infrastructure that serves a Third Party's requests.
 
-Commercial Incorporation does not include merely using the Software as an internal
-development, debugging, testing, or inspection tool to create an independent product that
-does not incorporate the Software or a Modification. For clarity, operating the Software
-within a CI/CD pipeline solely to build or test an independent product does not constitute
-Commercial Incorporation, even if the resulting built artifacts are subsequently
-delivered to a paying client.
+The following are not Commercial Incorporation:
 
-**1.10. "Commercial License"** means a separate written agreement signed by the Licensor
-and the person or entity seeking authorization for Commercial Incorporation.
+(i) using the Software as an internal development, debugging, testing, or inspection tool to create an independent product that does not incorporate the Software or a Modification;
+
+(ii) operating the Software within a CI/CD pipeline solely to build or test an independent product, even if the resulting built artifacts are subsequently delivered to a paying client;
+
+(iii) sharing the Software, or access to it, with a Third Party on a non-commercial basis (for example, with a friend, a student, a non-profit, or a free and non-commercial project), where no consideration is received and the Software is not part of a Commercial Product; and
+
+(iv) a Contractor using the Software to perform work for a client within the scope of the client's Internal Use.
+
+**Examples.** (1) A company runs ProxyMaxx on its own build servers to test its mobile app. This is Internal Use. (2) A company ships ProxyMaxx inside its paid testing platform, or runs it on servers so that customers' test sessions are routed through it. This is Commercial Incorporation and requires a Commercial License. (3) A company's paid product invokes ProxyMaxx as a separate tool, behind the scenes, to deliver a feature to customers. This is Commercial Incorporation, because the Software is then a component of the offering. (4) A developer uses ProxyMaxx to debug an app and then sells the app, which contains no ProxyMaxx code and does not call it at runtime. This is not Commercial Incorporation.
+
+**1.12. "Commercial License"** means a separate written agreement signed by the Licensor and the person or entity seeking authorization for Commercial Incorporation.
+
+**1.13. "Platform Fork"** means a copy of the Licensor's public repository created using the built-in fork or copy feature of a code-hosting platform.
 
 ## 2. Community License Grant
 
-Subject to compliance with this License, the Licensor grants you a worldwide, non-exclusive,
-royalty-free, non-transferable license to:
+Subject to compliance with this License, the Licensor grants you a worldwide, non-exclusive, royalty-free, non-transferable license to:
 
 (a) access, run, study, and use the Software for personal use and Internal Use;
 
@@ -94,241 +80,157 @@ royalty-free, non-transferable license to:
 
 (c) modify the Software for personal use and Internal Use;
 
-(d) create, use, and distribute Patches in accordance with Section 4; and
+(d) create, use, and distribute Patches in accordance with Section 4;
 
-(e) reproduce and distribute exact, unmodified copies of the Original Software, provided
-that such copies include this License and all original copyright and attribution notices,
-are not a Modification, and are not distributed in a manner that constitutes Commercial
-Incorporation.
+(e) reproduce and distribute exact, unmodified copies of the Original Software, provided that such copies include this License and all original copyright and attribution notices, are not a Modification, and are not distributed in a manner that constitutes Commercial Incorporation; and
 
-The permissions in this Section include use by commercial organizations for their own
-Internal Use.
+(f) create and maintain Platform Forks in accordance with Section 4.3.
 
-No rights are granted under this License except those expressly stated herein. All rights
-not expressly granted are reserved by the applicable rights holder.
+The permissions in this Section include use by commercial organizations for their own Internal Use.
+
+**Direct license from the Licensor.** Each recipient of the Software, including a recipient of an exact copy under Section 2(e), receives a license from the Licensor directly, on the terms of this License. A person who redistributes a copy cannot grant additional rights or alter these terms.
+
+No rights are granted under this License except those expressly stated herein. All rights not expressly granted are reserved by the applicable rights holder.
 
 ## 3. Commercial Incorporation Requires Separate Authorization
 
-**3.1. Commercial License Required.** You may not engage in Commercial Incorporation
-unless you first obtain a Commercial License from the Licensor.
+**3.1. Commercial License Required.** You may not engage in Commercial Incorporation unless you first obtain a Commercial License from the Licensor.
 
-**3.2. No Implied Commercial Rights.** Public availability of the Software, access to its
-source code, community participation, or acceptance of a contribution does not grant
-permission for Commercial Incorporation.
+**3.2. No Implied Commercial Rights.** Public availability of the Software, access to its source code, community participation, or acceptance of a contribution does not grant permission for Commercial Incorporation.
 
-**3.3. Hosted and SaaS Offerings.** The requirement in Section 3.1 applies to hosted
-services, SaaS offerings, and similar services where the Software or a Modification is
-incorporated into or forms part of the service offered to Third Parties, even if customers
-do not receive a copy of the Software.
+**3.3. Hosted and SaaS Offerings.** The requirement in Section 3.1 applies to hosted services, SaaS offerings, and similar services where the Software or a Modification is incorporated into or forms part of the service offered to Third Parties, even if customers do not receive a copy of the Software.
 
-**3.4. Independent Products.** You do not need a Commercial License merely because you
-used ProxyMaxx internally to develop, test, debug, or inspect an independent product that
-does not incorporate the Software or a Modification.
+**3.4. Independent Products.** You do not need a Commercial License merely because you used ProxyMaxx internally to develop, test, debug, or inspect an independent product that does not incorporate the Software or a Modification.
 
-**3.5. Commercial Terms.** A Commercial License must specify the permitted scope of use
-and any applicable royalties, fees, attribution requirements, reporting obligations, and
-other conditions. No particular royalty rate is established by this Community License, and
-no royalty is payable for any use authorized by Section 2.
+**3.5. Commercial Terms.** A Commercial License must specify the permitted scope of use and any applicable royalties, fees, attribution requirements, reporting obligations, and other conditions. No particular royalty rate is established by this License, and no royalty is payable for any use authorized by Section 2. The Licensor may publish indicative or standard commercial terms for convenience; unless and until a Commercial License is signed, such published terms are not binding on either party.
+
+**3.6. Requests.** To request a Commercial License, or to ask whether a planned use requires one, contact the Licensor as described in Section 11.5. The Licensor will make reasonable efforts to respond within \[30\] days.
 
 ## 4. Modifications, Patches, and Forks
 
-**4.1. Private Modifications.** You may modify the Software for personal use and Internal
-Use, subject to the restrictions in this License.
+**4.1. Private Modifications.** You may modify the Software for personal use and Internal Use, subject to the restrictions in this License.
 
-**4.2. Patch Distribution.** You may publish and distribute Patches for the Software,
-provided that:
+**4.2. Patch Distribution.** You may publish and distribute Patches for the Software, provided that:
 
-(a) each Patch is distributed with this License or a reference to it and applicable
-attribution information;
+(a) each Patch is distributed with this License or a reference to it and applicable attribution information;
 
 (b) the Patch satisfies each requirement of Section 1.5;
 
 (c) you do not remove or misrepresent applicable copyright or licensing notices; and
 
-(d) the Patch is not distributed or used in a manner that constitutes unauthorized
-Commercial Incorporation.
+(d) the Patch is not distributed or used in a manner that constitutes unauthorized Commercial Incorporation.
 
-**4.3. Complete Modified Forks.** This License does not authorize you to publish,
-distribute, or sublicense a complete modified copy or fork of the Software. Any such
-distribution requires separate written permission from the Licensor.
+**4.3. Complete Modified Forks; Platform Forks.** This License does not authorize you to publish, distribute, or sublicense a complete modified copy or fork of the Software. Any such distribution requires separate written permission from the Licensor.
 
-**4.4. No Circumvention.** You may not divide a complete modified fork or the Original
-Software into multiple files, packages, patches, or downloads for the purpose of
-circumventing Section 4.3 or the content restrictions of a Patch in Section 1.5.
+However, you may create and maintain a Platform Fork on a code-hosting platform, and the Licensor acknowledges that the platform's terms allow this, for the limited purposes of viewing, evaluating, and preparing Patches and contributions to the Licensor's repository, provided that you do not, from or through the Platform Fork:
 
-**4.5. Contributions.** Submission of a Patch or contribution does not, by itself, transfer
-ownership of your contribution to the Licensor or grant you additional rights in the
-Software. Contributions may be subject to a separate contribution agreement.
+(a) publish releases, tags intended as releases, packages, container images, or binary builds of a modified Software;
+
+(b) present the Platform Fork as an alternative distribution or successor of ProxyMaxx; or
+
+(c) otherwise engage in Commercial Incorporation.
+
+**4.4. No Circumvention.** You may not divide a complete modified fork or the Original Software into multiple files, packages, patches, or downloads for the purpose of circumventing Section 4.3 or the content restrictions of a Patch in Section 1.5.
+
+**4.5. Contributions; Inbound License.** Unless you and the Licensor agree otherwise in writing, when you intentionally submit a Patch, pull request, or other contribution to the Licensor for inclusion in the Software:
+
+(a) you retain ownership of your contribution;
+
+(b) you grant the Licensor a worldwide, perpetual, non-exclusive, irrevocable, royalty-free license to use, reproduce, modify, distribute, and sublicense your contribution, in whole or in part, as part of the Software under this License, a Commercial License, or any other license the Licensor chooses, including a license that permits Commercial Incorporation;
+
+(c) you represent that you have the right to grant that license and that your contribution does not knowingly infringe the rights of others; and
+
+(d) you may be asked to sign a separate contributor agreement, and the Licensor may decline contributions that are not accompanied by one.
 
 ## 5. Attribution and Copyright Notices
 
-**5.1. Notice Preservation.** You must retain the applicable copyright notices, this
-License, and other attribution notices included with the Software in all copies or
-substantial portions of the Software that you are authorized to make.
+**5.1. Notice Preservation.** You must retain the applicable copyright notices, this License, and other attribution notices included with the Software in all copies or substantial portions of the Software that you are authorized to make.
 
-**5.2. Product Attribution.** When a Commercial License authorizes Commercial
-Incorporation, the parties must specify in that agreement the required form and placement
-of attribution, which may include documentation, an acknowledgements page, or the product
-interface.
+**5.2. Product Attribution.** When a Commercial License authorizes Commercial Incorporation, the parties must specify in that agreement the required form and placement of attribution, which may include documentation, an acknowledgements page, or the product interface.
 
-**5.3. No Endorsement.** You may not state or imply that the Licensor endorses, sponsors,
-or certifies your product without prior written permission.
+**5.3. No Endorsement.** You may not state or imply that the Licensor endorses, sponsors, or certifies your product without prior written permission.
 
-**5.4. Trademarks.** This License does not grant permission to use the ProxyMaxx name,
-logos, or other trademarks except as reasonably necessary to identify the Software or as
-separately authorized in writing.
+**5.4. Trademarks.** This License does not grant permission to use the ProxyMaxx name, logos, or other trademarks except as reasonably necessary to identify the Software or as separately authorized in writing.
 
 ## 6. Third-Party Components
 
-The Software may contain, bundle, or interact with third-party software, libraries, assets,
-or other materials governed by separate licenses.
+The Software may contain, bundle, or interact with third-party software, libraries, assets, or other materials governed by separate licenses.
 
-Those separate licenses continue to govern the relevant components. Nothing in this
-License overrides third-party rights or grants the Licensor rights that the Licensor does
-not possess.
+Those separate licenses continue to govern the relevant components. Nothing in this License overrides third-party rights or grants the Licensor rights that the Licensor does not possess.
 
-In particular, the bundled Android emulator assets under `Resources/android/Magisk/`
-contain unmodified Magisk artifacts distributed under the GNU General Public License
-version 3. Those artifacts are not part of the Software for purposes of this License, are
-governed solely by that license, and the written source offer shipped alongside them
-applies independently of, and survives termination of, any rights granted under this
-License.
+In particular, the bundled Android emulator assets under `Resources/android/Magisk/` contain unmodified Magisk artifacts distributed under the GNU General Public License version 3. Those artifacts are separate programs that are merely distributed alongside the Software, are not part of the Software for purposes of this License, and are governed solely by that license. The written source offer shipped alongside them applies independently of, and survives termination of, any rights granted under this License. If you redistribute a copy of the repository that includes those artifacts, you must preserve their license text and source offer as well.
 
-You are responsible for reviewing and complying with applicable third-party license terms
-when using or distributing the Software.
+You are responsible for reviewing and complying with applicable third-party license terms when using or distributing the Software.
 
 ## 7. Intellectual Property and Ownership
 
-The Software is licensed, not sold. Except for the rights expressly granted in this
-License, no ownership interest in the Software is transferred to you.
+The Software is licensed, not sold. Except for the rights expressly granted in this License, no ownership interest in the Software is transferred to you.
 
-Each contributor retains the rights they hold in their own contributions, subject to any
-separate agreement governing those contributions and any rights granted to other parties.
+Each contributor retains the rights they hold in their own contributions, subject to Section 4.5, any separate agreement governing those contributions, and any rights granted to other parties.
 
-Nothing in this License transfers ownership of the Licensor's intellectual property or
-grants rights beyond those the Licensor is legally entitled to grant.
+Nothing in this License transfers ownership of the Licensor's intellectual property or grants rights beyond those the Licensor is legally entitled to grant.
 
 ## 8. Term and Termination
 
-**8.1. Term.** This License remains effective for as long as you exercise rights under it,
-unless terminated in accordance with this Section.
+**8.1. Term.** This License remains effective for as long as you exercise rights under it, unless terminated in accordance with this Section.
 
-**8.2. Termination for Breach.** If you materially violate this License, the Licensor may
-terminate your permissions to the extent permitted by applicable law. Where required by law
-or specified in an applicable agreement, you will be given notice and a reasonable
-opportunity to cure the violation.
+**8.2. Termination for Breach.** If you materially violate this License, the Licensor may give you written notice describing the violation. Your rights under this License terminate \[30\] days after the notice unless you cure the violation within that period. If you cure it, your rights are reinstated. Notwithstanding the foregoing, if you have previously received a notice for the same or a similar violation, or if the violation is a willful breach of Section 3 or Section 4, your rights terminate immediately upon notice, subject to applicable law.
 
-**8.3. After Termination.** Upon termination, you must cease activities no longer
-authorized under this License, subject to applicable law and any rights that cannot
-lawfully be terminated.
+**8.3. After Termination.** Upon termination, you must cease activities no longer authorized under this License, subject to applicable law and any rights that cannot lawfully be terminated. Termination of your rights does not affect the rights of other recipients who received the Software in compliance with this License.
 
-**8.4. Commercial Agreements.** Termination or expiration of a Commercial License is
-governed by that agreement, including any applicable transition provisions for existing
-customers, previously distributed products, and outstanding royalty obligations.
+**8.4. Commercial Agreements.** Termination or expiration of a Commercial License is governed by that agreement, including any applicable transition provisions for existing customers, previously distributed products, and outstanding royalty obligations.
 
 ## 9. Disclaimer of Warranty
 
-To the maximum extent permitted by applicable law, the Software is provided "AS IS,"
-without warranties or conditions of any kind, express or implied, including warranties of
-merchantability, fitness for a particular purpose, title, and non-infringement.
+To the maximum extent permitted by applicable law, the Software is provided "AS IS," without warranties or conditions of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose, title, and non-infringement.
 
 You assume the risks associated with using the Software.
 
 ## 10. Limitation of Liability
 
-To the maximum extent permitted by applicable law, the Licensor will not be liable for
-indirect, incidental, special, consequential, exemplary, or punitive damages, or for loss
-of profits, revenue, data, or business opportunities arising from or relating to the
-Software or this License.
+To the maximum extent permitted by applicable law, the Licensor will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, or for loss of profits, revenue, data, or business opportunities arising from or relating to the Software or this License.
 
-Nothing in this License excludes or limits liability to the extent that such exclusion or
-limitation is prohibited by applicable law.
+Nothing in this License excludes or limits liability to the extent that such exclusion or limitation is prohibited by applicable law.
 
 ## 11. General Provisions
 
-**11.1. No Waiver.** Failure to enforce a provision of this License does not constitute a
-waiver of that provision.
+**11.1. No Waiver.** Failure to enforce a provision of this License does not constitute a waiver of that provision.
 
-**11.2. Severability.** If a provision is held unenforceable, it will be limited or severed
-to the minimum extent necessary, and the remaining provisions will remain in effect to the
-extent permitted by law.
+**11.2. Severability.** If a provision is held unenforceable, it will be limited or severed to the minimum extent necessary, and the remaining provisions will remain in effect to the extent permitted by law.
 
-**11.3. Entire Agreement.** This License governs the community-use permissions granted for
-the Software. A separate signed Commercial License governs the commercial rights expressly
-granted under that agreement.
+**11.3. Entire Agreement.** This License governs the community-use permissions granted for the Software. A separate signed Commercial License governs the commercial rights expressly granted under that agreement.
 
-**11.4. Governing Law and Disputes.** This License and any dispute arising from it are
-governed by the laws of the State of Delaware, USA, excluding its conflict-of-law
-provisions.
+**11.4. Governing Law and Disputes.** \[DRAFTING NOTE: choose with counsel. The simplest option is a single governing law and a single forum that applies equally to both parties, for example: "This License is governed by the laws of \[Republic of Singapore / Republic of Indonesia / other\], without regard to its conflict-of-law rules. The courts of \[same jurisdiction\] have non-exclusive jurisdiction over any dispute arising out of this License."\]
 
-Except as provided in the next paragraph, any dispute, claim, or controversy arising out of
-or relating to this License shall be resolved by binding arbitration administered by the
-Singapore International Arbitration Centre (SIAC) in accordance with the SIAC Rules then in
-effect. The seat of the arbitration shall be Singapore. The language of the arbitration
-shall be English. The award shall be final and binding, and judgment on the award may be
-entered in any court having jurisdiction.
+Either party may apply to any court of competent jurisdiction for injunctive or other equitable relief, including to prevent or stop infringement of intellectual property or breach of Section 3 or Section 4. \[OPTIONAL: Disputes under a Commercial License may be subject to arbitration as specified in that agreement.\]
 
-Notwithstanding the foregoing, the Licensor may bring an action in any court of competent
-jurisdiction in the State of Delaware or where you are located, to seek injunctive or other
-equitable relief, or to recover damages, for (i) infringement or misappropriation of
-intellectual property, (ii) breach of Section 3 (Commercial Incorporation Requires
-Separate Authorization), or (iii) breach of Section 4 (Modifications, Patches, and Forks).
-Nothing in this License prevents either party from applying to any court for interim or
-conservatory measures in support of arbitration.
+**11.5. Contact.** Requests for commercial licensing or written permission should be made through the official ProxyMaxx repository (https://github.com/AgiMaulana/ProxyMaxx) or at \[CONTACT EMAIL\].
 
-**11.5. Contact.** Requests for commercial licensing or written permission should be made
-through the official ProxyMaxx repository or another contact channel designated by the
-Licensor.
+## 12. Optional: Future License Conversion
+
+&#91;OPTIONAL SECTION - delete if you do not want a conversion clause. Many source-available licenses, such as the Business Source License and the Functional Source License, convert to a permissive license after a fixed period. This reduces adoption friction and answers the "what if the project is abandoned" objection, at the cost of giving up the patch-only rule for old versions.\]
+
+On the \[second / fourth\] anniversary of the date on which a given version of the Software is first made available under this License, that version will additionally be made available under the \[MIT License / Apache License 2.0\], and recipients may choose to use that version under either license.
 
 ---
 
-# Commercial License — Required Terms Schedule
+# Commercial License - Required Terms Schedule
 
-A separate written Commercial License should address at least the following terms.
+A separate written Commercial License must address at least the following terms.
 
-1. **Parties and authority:** Legal names, addresses, and confirmation that each party is
-   authorized to enter the agreement.
+1. **Parties and authority:** Legal names, addresses, and confirmation that each party is authorized to enter the agreement.
+2. **Licensed product or service:** Identification of the product, hosted service, or SaaS offering authorized to incorporate ProxyMaxx.
+3. **Licensed rights:** The permitted versions, modifications, distribution channels, territories, customer groups, and sublicensing rights.
+4. **Royalty rate:** A percentage expressly negotiated and agreed in writing by the parties. No royalty rate is implied or fixed by this License.
+5. **Royalty base:** A precise definition of revenue to which the agreed percentage applies, including the treatment of bundled products, subscriptions, advertising, indirect sales, discounts, refunds, taxes, and revenue attributable to other components.
+6. **Reporting period:** The frequency and deadline for royalty statements, such as quarterly reporting within thirty days after each calendar quarter.
+7. **Payment terms:** Payment deadlines, currency, permitted payment methods, invoicing, late-payment treatment, and any applicable withholding taxes.
+8. **Records and audit:** Record-retention periods, reasonable audit rights, confidentiality obligations, and allocation of audit costs.
+9. **Attribution:** Required copyright notices, acknowledgements, and product-interface or documentation credits.
+10. **Intellectual property and improvements:** Ownership of each party's pre-existing intellectual property, treatment of modifications and contributions, and any rights to improvements.
+11. **Support and warranties:** Whether support, maintenance, updates, service levels, or warranties are provided, and any associated fees.
+12. **Term and termination:** Agreement duration, termination rights, cure periods, effects of termination, treatment of existing customers, and payment of outstanding royalties.
+13. **Governing law and disputes:** Applicable law, jurisdiction, and dispute-resolution process.
+14. **Signatures:** Signatures of authorized representatives and the effective date of the agreement.
 
-2. **Licensed product or service:** Identification of the product, hosted service, or SaaS
-   offering authorized to incorporate ProxyMaxx.
-
-3. **Licensed rights:** The permitted versions, modifications, distribution channels,
-   territories, customer groups, and sublicensing rights.
-
-4. **Royalty rate:** A percentage expressly negotiated and agreed in writing by the parties.
-   No royalty rate is implied or fixed by the Community Source License.
-
-5. **Royalty base:** A precise definition of revenue to which the agreed percentage applies,
-   including the treatment of bundled products, subscriptions, advertising, indirect sales,
-   discounts, refunds, taxes, and revenue attributable to other components.
-
-6. **Reporting period:** The frequency and deadline for royalty statements, such as
-   quarterly reporting within thirty days after each calendar quarter.
-
-7. **Payment terms:** Payment deadlines, currency, permitted payment methods, invoicing,
-   late-payment treatment, and any applicable withholding taxes.
-
-8. **Records and audit:** Record-retention periods, reasonable audit rights, confidentiality
-   obligations, and allocation of audit costs.
-
-9. **Attribution:** Required copyright notices, acknowledgements, and product-interface or
-   documentation credits.
-
-10. **Intellectual property and improvements:** Ownership of each party's pre-existing
-    intellectual property, treatment of modifications and contributions, and any rights to
-    improvements.
-
-11. **Support and warranties:** Whether support, maintenance, updates, service levels, or
-    warranties are provided, and any associated fees.
-
-12. **Term and termination:** Agreement duration, termination rights, cure periods, effects
-    of termination, treatment of existing customers, and payment of outstanding royalties.
-
-13. **Governing law and disputes:** Applicable law, jurisdiction, and dispute-resolution
-    process.
-
-14. **Signatures:** Signatures of authorized representatives and the effective date of the
-    agreement.
-
-This schedule is a checklist, not a grant of commercial rights. Commercial Incorporation
-remains unauthorized until a separate Commercial License is executed.
+This schedule sets out the minimum content of a Commercial License. It is not itself a grant of commercial rights. Commercial Incorporation remains unauthorized until a separate Commercial License is executed.
