@@ -16,6 +16,8 @@ struct MapLocalView: View {
     @State private var selection: UUID?
     @State private var editing: EditorTarget?
     @State private var showEnabledOnly = false
+    @State private var isNamingScenario = false
+    @State private var scenarioName = ""
 
     private struct EditorTarget: Identifiable {
         let id = UUID()
@@ -63,6 +65,14 @@ struct MapLocalView: View {
             footer
         }
         .frame(width: 880, height: 580)
+        .alert("mapLocal.scenarioNameTitle", isPresented: $isNamingScenario) {
+            TextField("mapLocal.scenarioNamePlaceholder", text: $scenarioName)
+            Button("common.cancel", role: .cancel) { scenarioName = "" }
+            Button("common.save") { captureScenario() }
+                .disabled(scenarioName.trimmingCharacters(in: .whitespaces).isEmpty)
+        } message: {
+            Text("mapLocal.scenarioHelp")
+        }
         .sheet(item: $editing) { target in
             MapLocalEditorView(rule: target.rule, isNew: target.isNew) { saved in
                 if target.isNew {
@@ -212,6 +222,8 @@ struct MapLocalView: View {
             Button { move(1) } label: { Image(systemName: "arrow.down") }
                 .disabled(!canMove(1))
 
+            scenarioMenu
+
             Spacer()
 
             Toggle("mapLocal.showEnabled", isOn: $showEnabledOnly)
@@ -227,7 +239,56 @@ struct MapLocalView: View {
         .padding(.vertical, 10)
     }
 
+    /// Scenarios behave like saved switchboards: pick one and the rule list matches it.
+    private var scenarioMenu: some View {
+        Menu {
+            if rules.mapLocalScenarios.isEmpty {
+                Text("mapLocal.noScenarios")
+            } else {
+                ForEach(rules.mapLocalScenarios) { scenario in
+                    Button {
+                        rules.activateMapLocalScenario(id: scenario.id)
+                        onApply()
+                    } label: {
+                        if rules.isMapLocalScenarioActive(scenario) {
+                            Label(scenario.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(scenario.displayName)
+                        }
+                    }
+                }
+                Divider()
+                Menu("mapLocal.deleteScenario") {
+                    ForEach(rules.mapLocalScenarios) { scenario in
+                        Button(scenario.displayName) {
+                            rules.removeMapLocalScenario(id: scenario.id)
+                            onApply()
+                        }
+                    }
+                }
+                Divider()
+            }
+            Button("mapLocal.captureScenario") {
+                scenarioName = ""
+                isNamingScenario = true
+            }
+            .disabled(!rules.mapLocalRules.contains { $0.isEnabled })
+        } label: {
+            Label("mapLocal.scenarios", systemImage: "square.stack.3d.up")
+        }
+        .fixedSize()
+        .help("mapLocal.scenarioHelp")
+    }
+
     // MARK: - Actions
+
+    private func captureScenario() {
+        let enabled = rules.mapLocalRules.filter(\.isEnabled).map(\.id)
+        guard !enabled.isEmpty else { return }
+        rules.saveMapLocalScenario(MapLocalScenario(name: scenarioName, ruleIDs: enabled))
+        scenarioName = ""
+        onApply()
+    }
 
     private static let enableColumnWidth: CGFloat = 20
     private static let nameColumnWidth: CGFloat = 150

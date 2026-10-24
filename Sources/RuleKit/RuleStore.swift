@@ -14,6 +14,8 @@ public final class RuleStore: ObservableObject {
     /// Map Local rules, in the order they are evaluated.
     @Published public var mapLocalRules: [MapLocalRule] = []
     @Published public var isMapLocalEnabled: Bool = true
+    /// Named sets of Map Local rules, activated as a group.
+    @Published public var mapLocalScenarios: [MapLocalScenario] = []
 
     /// Where the rules are saved on disk; `nil` keeps the store in memory only, which is
     /// what unit tests want so they never read each other's leftovers.
@@ -43,6 +45,7 @@ public final class RuleStore: ObservableObject {
         sslProxyingPolicy = state.sslProxyingPolicy
         isMapLocalEnabled = state.isMapLocalEnabled
         mapLocalRules = state.mapLocalRules
+        mapLocalScenarios = state.mapLocalScenarios
     }
 
     private func save() {
@@ -58,7 +61,8 @@ public final class RuleStore: ObservableObject {
             isSSLProxyingEnabled: isSSLProxyingEnabled,
             sslProxyingPolicy: sslProxyingPolicy,
             isMapLocalEnabled: isMapLocalEnabled,
-            mapLocalRules: mapLocalRules
+            mapLocalRules: mapLocalRules,
+            mapLocalScenarios: mapLocalScenarios
         )
     }
 
@@ -119,6 +123,43 @@ public final class RuleStore: ObservableObject {
     /// Drop every Map Local rule at once; the switches and SSL policy survive.
     public func clearMapLocalRules() {
         mapLocalRules.removeAll()
+    }
+
+    // MARK: - Scenarios
+
+    /// Turn on exactly this scenario's rules and turn every other rule off.
+    /// Returns the number of existing rules it enabled.
+    @discardableResult
+    public func activateMapLocalScenario(id: UUID) -> Int {
+        guard let scenario = mapLocalScenarios.first(where: { $0.id == id }) else { return 0 }
+        return MapLocalScenarioRunner.activate(scenario, in: &mapLocalRules)
+    }
+
+    public func isMapLocalScenarioActive(_ scenario: MapLocalScenario) -> Bool {
+        MapLocalScenarioRunner.isActive(scenario, in: mapLocalRules)
+    }
+
+    /// Add a scenario, replacing any existing one with the same name so the CLI's
+    /// `create` is idempotent. The replacement keeps the original identifier.
+    public func saveMapLocalScenario(_ scenario: MapLocalScenario) {
+        let name = scenario.name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        if let index = mapLocalScenarios.firstIndex(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame || $0.id == scenario.id
+        }) {
+            var updated = scenario
+            updated.name = name
+            updated.id = mapLocalScenarios[index].id
+            mapLocalScenarios[index] = updated
+        } else {
+            var added = scenario
+            added.name = name
+            mapLocalScenarios.append(added)
+        }
+    }
+
+    public func removeMapLocalScenario(id: UUID) {
+        mapLocalScenarios.removeAll { $0.id == id }
     }
 
     public func duplicateMapLocalRule(id: UUID) {

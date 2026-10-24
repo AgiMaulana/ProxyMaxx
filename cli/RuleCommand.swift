@@ -55,9 +55,9 @@ enum RuleCommand {
         ProxyRegistry.read()?.owner == .app
     }
 
-    /// Ship one mutation to the GUI app and wait for its answer. The wire payload is
-    /// the same `MapLocalRule` the file stores, so both transports produce identical
-    /// engine state.
+    /// Ship one request to the GUI app and wait for its answer. The wire payload is the
+    /// same model the file stores, so both transports produce identical state; `Result`
+    /// carries the reply for reads (`listScenarios`) as well as writes.
     static func deliver(
         _ op: CommandIPC.Operation,
         rule: MapLocalRule? = nil,
@@ -67,8 +67,9 @@ enum RuleCommand {
         enabled: Bool? = nil,
         list: String? = nil,
         pattern: String? = nil,
-        add: Bool? = nil
-    ) async throws -> MapLocalRule? {
+        add: Bool? = nil,
+        scenario: MapLocalScenario? = nil
+    ) async throws -> CommandIPC.Result? {
         let message = CommandIPC.Message(
             op: op,
             rule: rule,
@@ -80,7 +81,8 @@ enum RuleCommand {
             enabled: enabled,
             list: list,
             pattern: pattern,
-            add: add
+            add: add,
+            scenario: scenario
         )
         guard let result = CommandIPC.request(message, timeout: 8) else {
             throw CLIError("the GUI app owns the proxy but did not respond within 8s — is it still open? (check: proxymaxx-cli status)")
@@ -88,7 +90,7 @@ enum RuleCommand {
         guard result.ok else {
             throw CLIError(result.error ?? "command rejected by the GUI app")
         }
-        return result.rule
+        return result
     }
 
     // MARK: - list
@@ -158,8 +160,8 @@ enum RuleCommand {
         if rule.name.isEmpty { rule.name = "cli \(pattern)" }
 
         if appOwned() {
-            let applied = try await deliver(.add, rule: rule)
-            try emitRule(applied ?? rule)
+            let result = try await deliver(.add, rule: rule)
+            try emitRule(result?.rule ?? rule)
             return
         }
 

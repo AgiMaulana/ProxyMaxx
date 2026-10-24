@@ -10,17 +10,41 @@ public struct RuleFile: Codable, Equatable, Sendable {
     public var sslProxyingPolicy: SSLProxyingPolicy
     public var isMapLocalEnabled: Bool
     public var mapLocalRules: [MapLocalRule]
+    /// Named sets of Map Local rules. Absent from files written before scenarios existed,
+    /// which decode as an empty list thanks to `init(from:)` below.
+    public var mapLocalScenarios: [MapLocalScenario]
 
     public init(
         isSSLProxyingEnabled: Bool = true,
         sslProxyingPolicy: SSLProxyingPolicy = .decryptAll,
         isMapLocalEnabled: Bool = true,
-        mapLocalRules: [MapLocalRule] = []
+        mapLocalRules: [MapLocalRule] = [],
+        mapLocalScenarios: [MapLocalScenario] = []
     ) {
         self.isSSLProxyingEnabled = isSSLProxyingEnabled
         self.sslProxyingPolicy = sslProxyingPolicy
         self.isMapLocalEnabled = isMapLocalEnabled
         self.mapLocalRules = mapLocalRules
+        self.mapLocalScenarios = mapLocalScenarios
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isSSLProxyingEnabled
+        case sslProxyingPolicy
+        case isMapLocalEnabled
+        case mapLocalRules
+        case mapLocalScenarios
+    }
+
+    /// Synthesised decoding would reject a file without `mapLocalScenarios`, which every
+    /// build before this one wrote. Decode it as empty so upgrading never loses rules.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isSSLProxyingEnabled = try container.decode(Bool.self, forKey: .isSSLProxyingEnabled)
+        sslProxyingPolicy = try container.decode(SSLProxyingPolicy.self, forKey: .sslProxyingPolicy)
+        isMapLocalEnabled = try container.decode(Bool.self, forKey: .isMapLocalEnabled)
+        mapLocalRules = try container.decode([MapLocalRule].self, forKey: .mapLocalRules)
+        mapLocalScenarios = try container.decodeIfPresent([MapLocalScenario].self, forKey: .mapLocalScenarios) ?? []
     }
 
     /// Read a rule file, falling back to defaults when it is missing or corrupt.

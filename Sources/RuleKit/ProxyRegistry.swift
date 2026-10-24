@@ -137,6 +137,8 @@ public enum CommandIPC {
         public let pattern: String?
         /// `setSSLProxying`: true adds the pattern, false removes it.
         public let add: Bool?
+        /// `addScenario`: the complete scenario to save.
+        public let scenario: MapLocalScenario?
         public let createdAt: Date
 
         public init(
@@ -150,7 +152,8 @@ public enum CommandIPC {
             enabled: Bool? = nil,
             list: String? = nil,
             pattern: String? = nil,
-            add: Bool? = nil
+            add: Bool? = nil,
+            scenario: MapLocalScenario? = nil
         ) {
             self.id = UUID().uuidString
             self.op = op
@@ -164,6 +167,7 @@ public enum CommandIPC {
             self.list = list
             self.pattern = pattern
             self.add = add
+            self.scenario = scenario
             self.createdAt = Date()
         }
     }
@@ -173,12 +177,29 @@ public enum CommandIPC {
         public let ok: Bool
         public let error: String?
         public let rule: MapLocalRule?
+        /// `activateScenario`: how many existing rules the scenario enabled.
+        public let applied: Int?
+        /// `listScenarios`: the app's live scenarios and rules, so a read never waits for
+        /// the app's debounced autosave to reach the rule file.
+        public let scenarios: [MapLocalScenario]?
+        public let rules: [MapLocalRule]?
 
-        public init(id: String, ok: Bool, error: String? = nil, rule: MapLocalRule? = nil) {
+        public init(
+            id: String,
+            ok: Bool,
+            error: String? = nil,
+            rule: MapLocalRule? = nil,
+            applied: Int? = nil,
+            scenarios: [MapLocalScenario]? = nil,
+            rules: [MapLocalRule]? = nil
+        ) {
             self.id = id
             self.ok = ok
             self.error = error
             self.rule = rule
+            self.applied = applied
+            self.scenarios = scenarios
+            self.rules = rules
         }
     }
 
@@ -198,6 +219,14 @@ public enum CommandIPC {
         case setSSLProxying
         /// Empty the app's current session. Only meaningful while the app owns the engine.
         case clearSession
+        /// Save or replace a named Map Local scenario, carried in `scenario`.
+        case addScenario
+        /// Delete a scenario, selected by id or name.
+        case removeScenario
+        /// Turn on exactly one scenario's rules, selected by id or name.
+        case activateScenario
+        /// Read the live scenarios and rules without touching the rule file.
+        case listScenarios
     }
 
     static func directory(_ directory: URL?) -> URL {

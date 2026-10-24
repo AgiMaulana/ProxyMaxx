@@ -589,3 +589,105 @@ final class MapLocalResponderEdgeCaseTests: XCTestCase {
         )
     }
 }
+
+final class MapLocalScenarioTests: XCTestCase {
+    private func rules(_ names: [String]) -> [MapLocalRule] {
+        names.map { MapLocalRule(name: $0, url: "\($0).example.com/*") }
+    }
+
+    func testActivateTurnsOnOnlyTheScenariosRules() {
+        var list = rules(["consultation", "prescription", "follow-up"])
+        list[1].isEnabled = true
+        let scenario = MapLocalScenario(name: "visit", ruleIDs: [list[0].id, list[2].id])
+
+        let applied = MapLocalScenarioRunner.activate(scenario, in: &list)
+
+        XCTAssertEqual(applied, 2)
+        XCTAssertEqual(list.map(\.isEnabled), [true, false, true],
+                       "a rule outside the scenario must be off, even if it was on before")
+    }
+
+    func testActivateIgnoresRulesDeletedSinceCapture() {
+        var list = rules(["consultation"])
+        var scenario = MapLocalScenario(name: "visit", ruleIDs: [list[0].id, UUID()])
+        scenario.ruleIDs.append(UUID())
+
+        let applied = MapLocalScenarioRunner.activate(scenario, in: &list)
+
+        XCTAssertEqual(applied, 1)
+        XCTAssertTrue(list[0].isEnabled)
+    }
+
+    func testIsActiveMatchesTheExactSwitchboard() {
+        var list = rules(["one", "two"])
+        list[0].isEnabled = false
+        let scenario = MapLocalScenario(name: "both", ruleIDs: list.map(\.id))
+        XCTAssertFalse(
+            MapLocalScenarioRunner.isActive(scenario, in: list),
+            "one scenario rule is off, so the switchboard does not match"
+        )
+
+        var enabled = list
+        for index in enabled.indices { enabled[index].isEnabled = true }
+        XCTAssertTrue(MapLocalScenarioRunner.isActive(scenario, in: enabled))
+    }
+
+    @MainActor
+    func testStoreSavesReplacesAndRemovesScenarios() {
+        let store = RuleStore()
+        let rule = MapLocalRule(name: "one", url: "a/*")
+        store.addMapLocalRule(rule)
+
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [rule.id]))
+        XCTAssertEqual(store.mapLocalScenarios.map(\.name), ["visit"])
+
+        let sameName = MapLocalScenario(name: "Visit", ruleIDs: [])
+        store.saveMapLocalScenario(sameName)
+        XCTAssertEqual(store.mapLocalScenarios.count, 1, "a same-name capture replaces instead of duplicating")
+        XCTAssertEqual(store.mapLocalScenarios[0].ruleIDs, [])
+        XCTAssertEqual(store.mapLocalScenarios[0].name, "Visit")
+
+        store.removeMapLocalScenario(id: store.mapLocalScenarios[0].id)
+        XCTAssertTrue(store.mapLocalScenarios.isEmpty)
+    }
+
+    @MainActor
+    func testScenariosSurviveASecondStore() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RuleKitScenarioTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("rules.json")
+        let store = RuleStore(persistenceURL: url)
+        let rule = MapLocalRule(name: "one", url: "a/*")
+        store.addMapLocalRule(rule)
+        store.saveMapLocalScenario(MapLocalScenario(name: "visit", ruleIDs: [rule.id]))
+        store.flushRulesToDisk()
+
+        let reloaded = RuleStore(persistenceURL: url)
+        XCTAssertEqual(reloaded.mapLocalScenarios.map(\.name), ["visit"])
+        XCTAssertEqual(reloaded.mapLocalScenarios.first?.ruleIDs, [rule.id])
+
+        let applied = reloaded.activateMapLocalScenario(id: reloaded.mapLocalScenarios[0].id)
+        XCTAssertEqual(applied, 1)
+        XCTAssertTrue(reloaded.mapLocalRules[0].isEnabled)
+    }
+
+    func testRuleFileWrittenBeforeScenariosStillLoads() throws {
+        let file = RuleFile(
+            isMapLocalEnabled: false,
+            mapLocalRules: [MapLocalRule(name: "kept", url: "api.example.com/*")]
+        )
+        let encoded = try JSONEncoder().encode(file)
+        var object = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "mapLocalScenarios")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(RuleFile.self, from: legacyData)
+
+        XCTAssertEqual(decoded.mapLocalRules.map(\.name), ["kept"])
+        XCTAssertFalse(decoded.isMapLocalEnabled)
+        XCTAssertTrue(decoded.mapLocalScenarios.isEmpty)
+    }
+}
+

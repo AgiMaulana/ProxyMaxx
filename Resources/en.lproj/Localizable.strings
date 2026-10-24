@@ -14,6 +14,7 @@
 /* MARK: Common */
 "common.ok" = "OK";
 "common.done" = "Done";
+"common.save" = "Save";
 "common.cancel" = "Cancel";
 "common.add" = "Add";
 "common.delete" = "Delete";
@@ -133,6 +134,13 @@
 "mapLocal.showEnabled" = "Show enabled";
 "mapLocal.showEnabledHelp" = "Show enabled rules only";
 "mapLocal.shortcuts" = "New: ⌘N   Edit: ⌘⏎   Delete: ⌘⌫   Duplicate: ⌘D   Toggle: Space";
+"mapLocal.scenarios" = "Scenarios";
+"mapLocal.noScenarios" = "No scenarios yet";
+"mapLocal.captureScenario" = "Save Enabled Rules as Scenario…";
+"mapLocal.deleteScenario" = "Delete Scenario";
+"mapLocal.scenarioNameTitle" = "Name This Scenario";
+"mapLocal.scenarioNamePlaceholder" = "consultation flow";
+"mapLocal.scenarioHelp" = "Activating a scenario enables its rules and turns every other rule off.";
 "mapLocal.createTitle" = "Create Local Override Rule";
 "mapLocal.editTitle" = "Edit Local Override Rule";
 "mapLocal.formSubtitle" = "Configure URL matching and the mock response source";
