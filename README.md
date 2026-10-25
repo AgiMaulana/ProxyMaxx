@@ -119,17 +119,22 @@ Exact, optionally filtered by method, and can delay the response. Rules are eval
 bottom and the first match wins. A rule whose file or directory is gone falls through to the
 remote server.
 
-Rules are grouped by **scenario**: a named set of rules standing in for a test situation such
-as "empty cart" or "server error". Activation is exclusive — activating a scenario turns its
-rules on and every other rule off — and a scenario is a tag, so one rule (a login stub, a
-feature flag) can belong to several of them. Browsing a scenario in the sidebar only filters
-the list; activation is its own button. Flipping a member switch by hand turns the pill amber
-as "modified" until you reset or turn the scenario off, and a scenario keeps at most one rule
-per endpoint: adding a second asks first, then swaps it with an undo.
+**ZIP bundles** share a collection without maintaining scenarios or endpoint groups in the
+app. Export selected rules or the complete list, then import a ZIP after previewing its
+rules and response paths. Response files and directories travel with the manifest using
+relative paths; import copies them into ProxyMaxx-managed storage.
 
-![The Local Override window, with the scenario sidebar on the left and the rule table grouped by endpoint](docs/screenshots/mac-app-local-override-list.png)
+Imported rules stay in the flat list and remain owned by their bundle when edited.
+**Imported Bundles** offers Activate, Deactivate, Export and Remove. Activation turns the
+collection's rules on and every other rule off; import defaults to inactive, and deactivation
+turns off only that collection. The CLI exposes the same operations with `bundle` commands.
+Invalid packages and duplicate identities are rejected before configuration changes.
 
-![The Create rule form, with the scenario chip field under the matching rule and the mock response below](docs/screenshots/mac-app-local-override-create-rule.png)
+![The Local Override window, with a flat ordered rule table and ZIP import/export controls](docs/screenshots/mac-app-local-override-list.png)
+
+![The Create rule form, with URL matching above the mock response editor](docs/screenshots/mac-app-local-override-create-rule.png)
+
+![The ZIP import preview, showing rule order and relative bundled response paths before activation](docs/screenshots/mac-app-local-override-import-bundle.png)
 
 ### Certificates and system proxy
 
@@ -199,7 +204,8 @@ Compose, Diff, GraphQL/Protobuf, HTTP/2, HAR import/export, MCP server.
 5. Add hosts to **SSL Proxying → Exclude** to leave their TLS untouched.
 6. Open **Local Override** (Cmd+L) to answer matched URLs from a local file or directory.
    Add a rule, set its URL and matching style, then pick the file or directory under
-   **Mock response**; group rules in a scenario to switch whole test situations at once.
+   **Mock response**. Export selected rules or all rules as a ZIP to share a test setup;
+   **Import ZIP…** previews a collection before adding it. Activate it from **Imported Bundles**.
 
 The app's menu holds the rest: **Command Line Tool…**, **Install Browser Extension…**,
 **Open Android Emulator Guide** and **Open Android Device Guide**.

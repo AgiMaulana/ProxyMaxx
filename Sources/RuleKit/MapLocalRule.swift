@@ -127,34 +127,8 @@ public struct MapLocalRule: Identifiable, Codable, Hashable, Sendable {
         return trimmed.isEmpty ? url : trimmed
     }
 
-    /// What the rule answers: its method and URL pattern. Scenarios use this to keep one
-    /// rule per endpoint, so two answers for the same requests cannot race.
-    public var endpoint: MapLocalEndpoint {
-        MapLocalEndpoint(method: method.displayName, pattern: url.trimmingCharacters(in: .whitespaces))
-    }
 }
 
-/// The method-and-pattern pair that identifies an endpoint in the rule list.
-///
-/// Match style and destination are not part of the identity: they change how the answer
-/// is produced, not which requests the rule claims.
-public struct MapLocalEndpoint: Hashable, Sendable {
-    public let method: String
-    public let pattern: String
-
-    public init(method: String, pattern: String) {
-        self.method = method
-        self.pattern = pattern
-    }
-
-    /// The grouping header, for example `GET consultation/*`.
-    public var label: String {
-        pattern.isEmpty ? method : "\(method) \(pattern)"
-    }
-
-    /// Stable identity for dictionaries and section identifiers.
-    public var key: String { "\(method)\u{1F}\(pattern)" }
-}
 
 /// Names for rules that were saved with an empty name field.
 ///

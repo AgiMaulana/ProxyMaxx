@@ -164,52 +164,7 @@ final class CommandIPCTests: XCTestCase {
         XCTAssertNil(message.enabled)
     }
 
-    /// The parity operations carry their payload across the file store intact. Compares
-    /// the fields, not the whole value: `createdAt` rides seconds-since-1970 and so is not
-    /// bit-identical after a round trip.
-    func testParityOperationPayloadsRoundTrip() throws {
-        let messages: [CommandIPC.Message] = [
-            .init(op: .setToolEnabled, tool: "map-local", enabled: false),
-            .init(op: .setSSLProxying, list: "exclude", pattern: "*.apple.com", add: true),
-            .init(op: .update, rule: MapLocalRule(url: "example.com/*", destination: .file("/tmp/x.json"))),
-            .init(op: .clearSession),
-            .init(op: .addScenario, scenario: MapLocalScenario(name: "visit", ruleIDs: [UUID()])),
-        ]
-        for message in messages {
-            let data = try ProxyRegistry.encoder.encode(message)
-            let decoded = try ProxyRegistry.decoder.decode(CommandIPC.Message.self, from: data)
-            XCTAssertEqual(decoded.op, message.op)
-            XCTAssertEqual(decoded.tool, message.tool)
-            XCTAssertEqual(decoded.enabled, message.enabled)
-            XCTAssertEqual(decoded.list, message.list)
-            XCTAssertEqual(decoded.pattern, message.pattern)
-            XCTAssertEqual(decoded.add, message.add)
-            XCTAssertEqual(decoded.rule, message.rule)
-            XCTAssertEqual(decoded.scenario, message.scenario)
-        }
-    }
 
-    /// A scenario read answers with the app's live store, which is what lets
-    /// `scenario create` followed by `scenario activate` work before the app's
-    /// debounced autosave has reached the rule file.
-    func testScenarioSnapshotRoundTrip() throws {
-        let rule = MapLocalRule(name: "consultation", url: "api.example.com/consultation/*")
-        let scenario = MapLocalScenario(name: "visit", ruleIDs: [rule.id])
-        let result = CommandIPC.Result(
-            id: "snapshot",
-            ok: true,
-            applied: 1,
-            scenarios: [scenario],
-            rules: [rule]
-        )
-        let decoded = try ProxyRegistry.decoder.decode(
-            CommandIPC.Result.self,
-            from: ProxyRegistry.encoder.encode(result)
-        )
-        XCTAssertEqual(decoded.scenarios, [scenario])
-        XCTAssertEqual(decoded.rules, [rule])
-        XCTAssertEqual(decoded.applied, 1)
-    }
 }
 
 /// Contract tests for the shared flow spool: the hand-off buffer that lets the window

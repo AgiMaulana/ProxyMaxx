@@ -129,26 +129,56 @@ proxymaxx-cli rule move    --id UUID --by (-1|1 ...)
 proxymaxx-cli rule clear
 ```
 
-### Named test scenarios
+### ZIP bundles
 
-A scenario is a name for a set of Map Local rules, so one command sets up a whole test run.
-Activation is exclusive: the scenario's rules turn on and every other rule turns off, which
-keeps a leftover rule from answering a request the test did not expect.
+Share a self-contained collection of rules and response files with `bundle export`, then
+import it on another machine or before an automated test run:
 
 ```sh
-proxymaxx-cli scenario create --name "visit flow" \
-    --include consultation,prescription,follow-up
-proxymaxx-cli scenario activate "visit flow"
-proxymaxx-cli scenario list --text
-proxymaxx-cli scenario delete "visit flow"
+# Export all current overrides, or select rules by name, URL pattern or UUID.
+proxymaxx-cli bundle export --name "Post Consultation" --output post-consultation.zip
+proxymaxx-cli bundle export --include consultation,prescription --output selected.zip
+
+# Import disabled, then activate, or import with --activate on a fresh configuration.
+proxymaxx-cli bundle import post-consultation.zip
+proxymaxx-cli bundle activate post-consultation
+proxymaxx-cli bundle list --text
+proxymaxx-cli bundle show post-consultation
+proxymaxx-cli bundle export post-consultation --output edited-post-consultation.zip
+proxymaxx-cli bundle deactivate post-consultation
+proxymaxx-cli bundle remove post-consultation
 ```
 
-`--include` takes rule names, URL patterns or ids, comma separated. `--rules PATH` still
-names the rule file on every scenario command. A scenario stores ids, so renaming a rule
-keeps it in the set, and a rule deleted since capture is skipped with a warning instead of
-failing the activation. Scenarios are saved in `rules.json` beside the rules; the Map Local
-window lists them in its **Scenarios** menu, and **Save Enabled Rules as Scenario…** captures
-the current switchboard there.
+Every bundle command accepts `--rules PATH`. An explicit path operates on that file;
+otherwise commands use the GUI's live state when it hosts the proxy. Select imported bundles
+by UUID, case-insensitive name, or an unambiguous filename-style name such as
+`post-consultation` for “Post Consultation”. `list` emits NDJSON and `show` emits one JSON object.
+
+Import defaults incoming rules to disabled and leaves existing switches alone.
+`bundle import ZIP --activate` imports and activates in one transaction. Activation enables
+the collection and Local Override, disabling every outside rule. Deactivation disables only
+that collection's members. Removal deletes owned rules and managed response files; files
+still used by ordinary overrides are kept. Editing a member does not detach it: later
+exports include its current matching fields, response, and order.
+Activation is rejected when a collection has no remaining rules; existing switches stay unchanged.
+
+The ZIP contains `manifest.json` and `map-local/<rule UUID>/<response basename>`.
+The manifest has `formatVersion: 1`, a bundle `id`, a `name`, and an `overrides` array using
+the existing `MapLocalRule` schema. Each rule's `destination` contains a relative file or
+directory path under `map-local/`. Directories include their complete contents. Full HTTP
+response files retain status, headers and body; direct `FILE_URL` responses are materialized
+so they no longer depend on the source machine. Import copies responses beside the rule file
+under `local-override-bundles/<bundle UUID>/` and rewrites only the local destination paths.
+
+Validation completes before configuration changes. Unsupported versions, malformed rules,
+missing responses, traversal paths, symlinks, corrupt data, and duplicate bundle names,
+bundle UUIDs or rule UUIDs are rejected. Re-import never silently replaces a collection;
+remove it explicitly first. CLI export refuses an existing output path.
+Format 1 accepts ordinary stored/deflated ZIPs, not encrypted, split or ZIP64 archives.
+Limits are 10,000 entries, 512 MiB per response, 1 GiB total, and 4 MiB for the manifest.
+
+The top-level JSON `import` and `export` commands below remain configuration transfers.
+They contain local paths and are not portable response bundles.
 
 `rules map-local create` and `update` take the response source and its shape:
 

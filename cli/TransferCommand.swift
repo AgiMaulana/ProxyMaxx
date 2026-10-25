@@ -15,9 +15,10 @@ enum TransferCommand {
             throw CLIError("--mode must be all or enabledRules")
         }
 
-        var file = RuleFile.load(from: RuleCommand.resolveRulesFile(arguments))
+        var file = try RuleCommand.loadRulesFile(RuleCommand.resolveRulesFile(arguments))
         if mode == "enabledRules" {
             file.mapLocalRules = file.mapLocalRules.filter { $0.isEnabled }
+            RuleCommand.pruneBundleMembership(in: &file)
         }
         let url = URL(fileURLWithPath: (output as NSString).expandingTildeInPath)
         try file.write(to: url)
@@ -37,19 +38,32 @@ enum TransferCommand {
         guard FileManager.default.fileExists(atPath: source.path) else {
             throw CLIError("no config file at \(source.path)")
         }
-        let incoming = RuleFile.load(from: source)
+        let incoming = try RuleCommand.loadRulesFile(source)
         let target = RuleCommand.resolveRulesFile(arguments)
-        var file = RuleFile.load(from: target)
+        var file = try RuleCommand.loadRulesFile(target)
 
         switch mode {
         case "override":
             file = incoming
         default:
-            // Append keeps the existing switches and policy and adds the incoming rules,
-            // skipping any whose id is already present so a re-import cannot duplicate.
+            // Raw JSON append preserves local ownership; only newly added rules can
+            // acquire the incoming document's ownership metadata.
             let existing = Set(file.mapLocalRules.map(\.id))
-            file.mapLocalRules.append(contentsOf: incoming.mapLocalRules.filter { !existing.contains($0.id) })
+            let appended = incoming.mapLocalRules.filter { !existing.contains($0.id) }
+            file.mapLocalRules.append(contentsOf: appended)
+            let appendedIDs = Set(appended.map(\.id))
+            var owned = Set(file.mapLocalBundles.flatMap(\.ruleIDs))
+            for incomingBundle in incoming.mapLocalBundles {
+                let ids = incomingBundle.ruleIDs.filter { appendedIDs.contains($0) && owned.insert($0).inserted }
+                guard !ids.isEmpty else { continue }
+                if let index = file.mapLocalBundles.firstIndex(where: { $0.id == incomingBundle.id }) {
+                    file.mapLocalBundles[index].ruleIDs.append(contentsOf: ids)
+                } else {
+                    file.mapLocalBundles.append(MapLocalBundle(id: incomingBundle.id, name: incomingBundle.name, ruleIDs: ids))
+                }
+            }
         }
+        RuleCommand.pruneBundleMembership(in: &file)
         try file.write(to: target)
         note("imported \(incoming.mapLocalRules.count) map local rule\(incoming.mapLocalRules.count == 1 ? "" : "s") (\(mode)) into \(target.path)")
     }

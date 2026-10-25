@@ -1,112 +1,104 @@
 import SwiftUI
-import Branding
-import FlowKit
 import RuleKit
 
-/// A layout that arranges views left to right, wrapping to a new line when width runs out.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var layoutX: CGFloat = 0
-        var layoutY: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var widest: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if layoutX > 0, layoutX + size.width > maxWidth {
-                layoutX = 0
-                layoutY += rowHeight + spacing
-                rowHeight = 0
-            }
-            widest = max(widest, layoutX + size.width)
-            layoutX += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-
-        return CGSize(
-            width: maxWidth.isFinite ? maxWidth : widest,
-            height: subviews.isEmpty ? 0 : layoutY + rowHeight
-        )
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var layoutX = bounds.minX
-        var layoutY = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if layoutX > bounds.minX, layoutX + size.width > bounds.maxX {
-                layoutX = bounds.minX
-                layoutY += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(
-                at: CGPoint(x: layoutX, y: layoutY),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(size)
-            )
-            layoutX += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-    }
+struct MapLocalImportPreview: Identifiable, Sendable {
+    let id = UUID()
+    let archiveURL: URL
+    let manifest: MapLocalBundleManifest
 }
 
-/// Reusable scenario chip view matching local override scenario designs.
-struct ScenarioChipView: View {
-    let name: String
-    var remove: (() -> Void)?
+struct MapLocalBundleImportView: View {
+    let preview: MapLocalImportPreview
+    let onImport: (Bool) throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var activate = false
+    @State private var errorMessage: String?
 
     var body: some View {
-        HStack(spacing: 5) {
-            Text(name).font(.callout)
-            if let remove {
-                Button(action: remove) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12, height: 12)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(L10n.format("mapLocal.removeScenarioHelp", name)))
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(Color(NSColor.controlBackgroundColor)))
-        .overlay(Capsule().stroke(Color(NSColor.separatorColor), lineWidth: 1))
-    }
-}
-
-/// Reusable status pill view for active or modified scenarios.
-struct ScenarioStatusPillView: View {
-    let title: String
-    let isModified: Bool
-    var onReset: (() -> Void)?
-
-    var body: some View {
-        let tint: Color = isModified ? .orange : .green
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(tint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(tint.opacity(0.15)))
-                .lineLimit(1)
-                .help("mapLocal.scenarioHelp")
-
-            if isModified, let onReset {
-                Button("mapLocal.resetScenario", action: onReset)
-                    .buttonStyle(.borderless)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("mapLocal.bundle.previewTitle").font(.title3).bold()
+                Text(preview.manifest.name).font(.headline).textSelection(.enabled)
+                Text(L10n.format("mapLocal.bundle.previewCount", preview.manifest.overrides.count))
                     .font(.caption)
-                    .help("mapLocal.resetScenarioHelp")
+                Text("mapLocal.bundle.previewHelp")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(16)
+
+            Divider()
+            Table(preview.manifest.overrides) {
+                TableColumn("common.name") { rule in
+                    Text(rule.displayName).lineLimit(1).help(rule.displayName)
+                }
+                .width(min: 100, ideal: 130, max: 150)
+                TableColumn("common.method") { rule in
+                    Text(rule.method.displayName).font(.system(.caption, design: .monospaced))
+                }
+                .width(65)
+                TableColumn("mapLocal.matchStyleColumn") { rule in
+                    Text(rule.matchStyle.displayName).lineLimit(1)
+                }
+                .width(110)
+                TableColumn("mapLocal.matchingURLs") { rule in
+                    Text(rule.url)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(rule.url)
+                }
+                .width(min: 150, ideal: 180, max: 210)
+                TableColumn("mapLocal.bundle.responseReference") { rule in
+                    Label(rule.destination.path, systemImage: rule.destination.symbolName)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(rule.destination.path)
+                }
+                .width(min: 160, ideal: 200, max: 240)
+            }
+            .overlay {
+                if preview.manifest.overrides.isEmpty {
+                    Text("mapLocal.bundle.noRules").padding(24)
+                }
+            }
+
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("mapLocal.bundle.activateOnImport", isOn: $activate)
+                    .toggleStyle(.checkbox)
+                    .disabled(preview.manifest.overrides.isEmpty)
+                Text("mapLocal.bundle.activateHelp")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("common.cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("mapLocal.bundle.import") {
+                        do {
+                            try onImport(activate)
+                            dismiss()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(16)
+        }
+        .frame(width: 880, height: 580)
+        .alert("mapLocal.bundle.errorTitle", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("common.ok", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 }

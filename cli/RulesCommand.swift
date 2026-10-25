@@ -50,8 +50,8 @@ enum RulesCommand {
 
     private static func mapLocal(action: String, arguments: Arguments) async throws {
         switch action {
-        case "list": try listMapLocal(arguments)
-        case "get": try getMapLocal(arguments)
+        case "list": try await listMapLocal(arguments)
+        case "get": try await getMapLocal(arguments)
         case "create": try await createMapLocal(arguments)
         case "update": try await updateMapLocal(arguments)
         case "delete": try await deleteMapLocal(arguments)
@@ -62,8 +62,8 @@ enum RulesCommand {
         }
     }
 
-    private static func listMapLocal(_ arguments: Arguments) throws {
-        let file = RuleFile.load(from: RuleCommand.resolveRulesFile(arguments))
+    private static func listMapLocal(_ arguments: Arguments) async throws {
+        let file = try await RuleCommand.mapLocalSnapshot(arguments)
         var rules = file.mapLocalRules
         if let only = try boolValue(arguments, "enabled") {
             rules = rules.filter { $0.isEnabled == only }
@@ -75,8 +75,8 @@ enum RulesCommand {
         )
     }
 
-    private static func getMapLocal(_ arguments: Arguments) throws {
-        let file = RuleFile.load(from: RuleCommand.resolveRulesFile(arguments))
+    private static func getMapLocal(_ arguments: Arguments) async throws {
+        let file = try await RuleCommand.mapLocalSnapshot(arguments)
         guard let id = idArgument(arguments),
               let rule = file.mapLocalRules.first(where: { $0.id == id })
         else {
@@ -102,11 +102,11 @@ enum RulesCommand {
         }
         try requireReadable(rule.destination.path)
 
-        if RuleCommand.appOwned() {
+        if RuleCommand.appOwned(for: arguments) {
             rule = try await RuleCommand.deliver(.add, rule: rule)?.rule ?? rule
         } else {
             let url = RuleCommand.resolveRulesFile(arguments)
-            var file = RuleFile.load(from: url)
+            var file = try RuleCommand.loadRulesFile(url)
             file.mapLocalRules.append(rule)
             try file.write(to: url)
         }
@@ -118,7 +118,7 @@ enum RulesCommand {
             RulesEnvelope.fail(tool: "map-local", action: "update", code: "invalid_input", message: "update needs a rule id")
         }
         let path = RuleCommand.resolveRulesFile(arguments)
-        var file = RuleFile.load(from: path)
+        var file = try await RuleCommand.mapLocalSnapshot(arguments)
         guard let index = file.mapLocalRules.firstIndex(where: { $0.id == id }) else {
             RulesEnvelope.fail(tool: "map-local", action: "update", code: "not_found", message: "no rule with id \(id.uuidString)")
         }
@@ -129,7 +129,7 @@ enum RulesCommand {
         try applyMapLocalFlags(arguments, to: &rule)
         if !rule.destination.path.isEmpty { try requireReadable(rule.destination.path) }
 
-        if RuleCommand.appOwned() {
+        if RuleCommand.appOwned(for: arguments) {
             rule = try await RuleCommand.deliver(.update, rule: rule)?.rule ?? rule
         } else {
             file.mapLocalRules[index] = rule
@@ -142,15 +142,16 @@ enum RulesCommand {
         guard let id = idArgument(arguments) else {
             RulesEnvelope.fail(tool: "map-local", action: "delete", code: "invalid_input", message: "delete needs a rule id")
         }
-        if RuleCommand.appOwned() {
+        if RuleCommand.appOwned(for: arguments) {
             _ = try await RuleCommand.deliver(.remove, target: RuleCommand.Selector(id: id, name: nil, url: nil))
         } else {
             let path = RuleCommand.resolveRulesFile(arguments)
-            var file = RuleFile.load(from: path)
+            var file = try RuleCommand.loadRulesFile(path)
             guard let index = file.mapLocalRules.firstIndex(where: { $0.id == id }) else {
                 RulesEnvelope.fail(tool: "map-local", action: "delete", code: "not_found", message: "no rule with id \(id.uuidString)")
             }
             file.mapLocalRules.remove(at: index)
+            RuleCommand.pruneBundleMembership(in: &file)
             try file.write(to: path)
         }
         RulesEnvelope.emit(tool: "map-local", action: "delete", data: ["id": id.uuidString])
@@ -160,11 +161,11 @@ enum RulesCommand {
     /// which is what `maplocal on|off` and the shipped CLI both do.
     private static func setMapLocalEnabled(_ arguments: Arguments, enabled: Bool) async throws {
         if let id = idArgument(arguments) {
-            if RuleCommand.appOwned() {
+            if RuleCommand.appOwned(for: arguments) {
                 _ = try await RuleCommand.deliver(enabled ? .enable : .disable, target: RuleCommand.Selector(id: id, name: nil, url: nil))
             } else {
                 let path = RuleCommand.resolveRulesFile(arguments)
-                var file = RuleFile.load(from: path)
+                var file = try RuleCommand.loadRulesFile(path)
                 guard let index = file.mapLocalRules.firstIndex(where: { $0.id == id }) else {
                     RulesEnvelope.fail(tool: "map-local", action: enabled ? "enable" : "disable", code: "not_found", message: "no rule with id \(id.uuidString)")
                 }
@@ -217,7 +218,7 @@ enum RulesCommand {
     }
 
     private static func listSSLProxying(_ arguments: Arguments) throws {
-        let file = RuleFile.load(from: RuleCommand.resolveRulesFile(arguments))
+        let file = try RuleCommand.loadRulesFile(RuleCommand.resolveRulesFile(arguments))
         RulesEnvelope.emit(
             tool: "ssl-proxying",
             action: "list",
@@ -238,11 +239,11 @@ enum RulesCommand {
         guard let pattern = arguments.value("pattern"), !pattern.isEmpty else {
             RulesEnvelope.fail(tool: "ssl-proxying", action: action, code: "invalid_input", message: "\(action) needs --pattern")
         }
-        if RuleCommand.appOwned() {
+        if RuleCommand.appOwned(for: arguments) {
             _ = try await RuleCommand.deliver(.setSSLProxying, list: list, pattern: pattern, add: add)
         } else {
             let path = RuleCommand.resolveRulesFile(arguments)
-            var file = RuleFile.load(from: path)
+            var file = try RuleCommand.loadRulesFile(path)
             var policy = file.sslProxyingPolicy
             switch list {
             case "include":
@@ -263,11 +264,11 @@ enum RulesCommand {
     /// Flip a whole-tool master switch, over IPC when the app owns the engine and in the
     /// shared rule file otherwise. Both transports end in identical engine state.
     static func setToolSwitch(fileTool: String, enabled: Bool, arguments: Arguments) async throws {
-        if RuleCommand.appOwned() {
+        if RuleCommand.appOwned(for: arguments) {
             _ = try await RuleCommand.deliver(.setToolEnabled, tool: fileTool, enabled: enabled)
         } else {
             let path = RuleCommand.resolveRulesFile(arguments)
-            var file = RuleFile.load(from: path)
+            var file = try RuleCommand.loadRulesFile(path)
             switch fileTool {
             case "map-local": file.isMapLocalEnabled = enabled
             default: file.isSSLProxyingEnabled = enabled
