@@ -7,49 +7,51 @@
 </head>
 <body>
   <header>
-    <h1>ProxyMaxx <span id="version" class="version">v1.0.6</span></h1>
-    <span id="app-state" class="chip">Checking…</span>
+    <h1>ProxyMaxx <span id="version" class="version">v1.0.7</span></h1>
+    <span id="app-state" class="chip" role="status">Checking…</span>
   </header>
 
-  <!--
-    Visible until popup.js hides it. If this text is on screen, the script never ran or
-    stopped early, which is otherwise indistinguishable from a page that never answered.
-    The version above is likewise static, so it proves which files the browser loaded even
-    when no script executes.
-  -->
+  <!-- Keep a visible failure and static version until popup.js runs. -->
   <p id="boot" class="boot">The popup script did not run.</p>
 
-  <button id="capture" class="capture" type="button" aria-pressed="false">
+  <button id="capture" class="capture" type="button" aria-pressed="false" aria-describedby="capture-detail" disabled>
     <span class="capture-label">Capture this browser</span>
-    <span id="capture-detail" class="capture-detail"></span>
+    <span id="capture-detail" class="capture-detail">Checking request routing…</span>
   </button>
 
   <dl class="facts">
-    <div><dt>Proxy setting</dt><dd id="fact-mode">—</dd></div>
-    <div><dt>App</dt><dd id="fact-app">—</dd></div>
-    <div><dt>HTTPS decryption</dt><dd id="fact-ca">—</dd></div>
+    <div><dt>Request routing</dt><dd id="fact-routing">Checking…</dd></div>
+    <div><dt>Website access</dt><dd id="fact-site-access">Checking…</dd></div>
+    <div><dt>Extension scope</dt><dd id="fact-scope">Checking…</dd></div>
+    <div><dt>App</dt><dd id="fact-app">Checking…</dd></div>
+    <div><dt>HTTPS decryption</dt><dd id="fact-ca">Checking…</dd></div>
   </dl>
 
   <div class="options">
     <label class="port">
-      <span>Port</span>
-      <input id="opt-port" type="number" min="1" max="65535" inputmode="numeric">
+      <span>Fallback port</span>
+      <input id="opt-port" type="number" min="1" max="65535" inputmode="numeric" disabled>
     </label>
   </div>
 
-  <p id="error" class="error" hidden></p>
+  <div id="error" class="error" hidden>
+    <p id="error-message" role="alert"></p>
+    <button id="dismiss-error" class="dismiss-error" type="button" hidden>Dismiss error</button>
+  </div>
 
-  <!--
-    Shown only while the app cannot be reached. Starting the app and reloading the extension
-    both happen outside this panel, and a popup that has already rendered its one reading of
-    the bridge would otherwise have to be closed and reopened to see the result.
-  -->
+  <!-- Refresh bridge state after starting the app outside this popup. -->
   <button id="retry" class="retry" type="button" hidden>Check again</button>
 
   <section class="checks">
-    <h2>What still stops capture</h2>
+    <h2>Capture checks</h2>
     <ul id="checks"></ul>
   </section>
+
+  <details id="private-help" class="private-help">
+    <summary>Private windows (optional)</summary>
+    <p>Normal-window capture does not need private access. To include private windows, open <code>about:addons</code>, choose <strong>Extensions</strong> in the sidebar, then <strong>ProxyMaxx</strong> &gt; <strong>Details</strong>. Set <strong>Run in Private Windows</strong> to <strong>Allow</strong>.</p>
+    <p>Without this access, ProxyMaxx does not select routes for private requests. An existing Firefox or system proxy can still carry private traffic.</p>
+  </details>
 
   <script src="popup.js"></script>
 </body>

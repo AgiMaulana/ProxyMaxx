@@ -5,8 +5,8 @@ import Branding
 ///
 /// Two small jobs, both mirroring the Android contract in `docs/android-vpn-protocol.md`:
 /// keep a state file the native messaging host serves to the extension, and install that
-/// host's manifest into each Chromium browser that is actually present. No socket, no
-/// daemon — the app configures the companion once and then serves it from a file.
+/// host's manifest for installed Chromium and Firefox browsers. No socket or daemon;
+/// the app publishes state to a file.
 public enum BrowserBridge {
     /// One fixed extension identity, so the host manifest can whitelist its origin.
     ///
@@ -119,8 +119,8 @@ public enum BrowserBridge {
     /// The folder name a browser sees, staged and installed alike.
     public static let extensionFolderName = "proxymaxx-extension"
 
-    /// The Firefox counterpart's folder name, staged and installed alike.
-    public static let firefoxFolderName = "proxymaxx-firefox-extension"
+    /// The Firefox XPI name, staged and installed alike.
+    public static let firefoxPackageName = "proxymaxx-firefox-extension.xpi"
 
     /// The first path that exists, ignoring nils.
     static func firstExisting(_ candidates: URL?...) -> URL? {
@@ -143,19 +143,14 @@ public enum BrowserBridge {
             .appendingPathComponent(extensionFolderName, isDirectory: true)
     }
 
-    /// The Firefox counterpart of `installedExtensionDirectory`, so the two can be
-    /// revealed and loaded side by side.
-    public static var installedFirefoxExtensionDirectory: URL {
+    /// Kept outside the app bundle so Finder can reveal the installable file.
+    public static var installedFirefoxExtensionPackage: URL {
         supportDirectory
             .appendingPathComponent("Browser Extension", isDirectory: true)
-            .appendingPathComponent(firefoxFolderName, isDirectory: true)
+            .appendingPathComponent(firefoxPackageName)
     }
 
-    /// Copy the built extension(s) to the location the browser loads them from.
-    ///
-    /// Returns those locations, so the caller can reveal them and name them. This is the
-    /// part of "install" the user can see; the host manifests are invisible by nature.
-    /// A source that is missing is skipped; if none remain, there is nothing to reveal.
+    /// Install the Chromium folder and Firefox XPI, returning their parent for Finder.
     @discardableResult
     public static func installExtensions() throws -> URL {
         let bundled = Bundle.main.resourceURL?
@@ -164,29 +159,22 @@ public enum BrowserBridge {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let sources: [(destination: URL, source: URL?)] = [
-            (
-                installedExtensionDirectory,
-                firstExisting(
-                    bundled?.appendingPathComponent(extensionFolderName, isDirectory: true),
-                    packageRoot.appendingPathComponent("Browser/ProxyMaxxExtension", isDirectory: true)
-                )
-            ),
-            (
-                installedFirefoxExtensionDirectory,
-                firstExisting(
-                    bundled?.appendingPathComponent(firefoxFolderName, isDirectory: true),
-                    packageRoot.appendingPathComponent("Browser/FirefoxExtension", isDirectory: true)
-                )
-            ),
-        ]
-        var installedAny = false
-        for case let (destination, source?) in sources {
-            _ = try copyExtension(from: source, to: destination)
-            installedAny = true
+        guard let chromium = firstExisting(
+            bundled?.appendingPathComponent(extensionFolderName, isDirectory: true),
+            packageRoot.appendingPathComponent("Browser/ProxyMaxxExtension", isDirectory: true)
+        ), let firefox = firstExisting(
+            bundled?.appendingPathComponent(firefoxPackageName),
+            packageRoot.appendingPathComponent("Resources/browser/\(firefoxPackageName)")
+        ) else { throw BridgeError.extensionNotBuilt }
+
+        _ = try copyExtension(from: chromium, to: installedExtensionDirectory)
+        _ = try copyExtension(from: firefox, to: installedFirefoxExtensionPackage)
+        let directory = supportDirectory.appendingPathComponent("Browser Extension", isDirectory: true)
+        let obsoleteFirefoxFolder = directory.appendingPathComponent("proxymaxx-firefox-extension", isDirectory: true)
+        if FileManager.default.fileExists(atPath: obsoleteFirefoxFolder.path) {
+            try FileManager.default.removeItem(at: obsoleteFirefoxFolder)
         }
-        guard installedAny else { throw BridgeError.extensionNotBuilt }
-        return supportDirectory.appendingPathComponent("Browser Extension", isDirectory: true)
+        return directory
     }
 
     /// Copy a built extension into place, replacing whatever is already there.
@@ -232,7 +220,10 @@ public enum BrowserBridge {
         let applicationSupport = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        return detectedBrowsers(applicationSupport: applicationSupport)
+    }
 
+    static func detectedBrowsers(applicationSupport: URL) -> [Browser] {
         let profiles: [(name: String, path: String, kind: Browser.Kind)] = [
             ("Chrome", "Google/Chrome", .chromium),
             ("Chrome Beta", "Google/Chrome Beta", .chromium),
@@ -252,9 +243,12 @@ public enum BrowserBridge {
         return profiles.compactMap { profile in
             let root = applicationSupport.appendingPathComponent(profile.path, isDirectory: true)
             guard FileManager.default.fileExists(atPath: root.path) else { return nil }
+            let messagingRoot = profile.kind == .firefox
+                ? applicationSupport.appendingPathComponent("Mozilla", isDirectory: true)
+                : root
             return Browser(
                 name: profile.name,
-                directory: root.appendingPathComponent("NativeMessagingHosts", isDirectory: true),
+                directory: messagingRoot.appendingPathComponent("NativeMessagingHosts", isDirectory: true),
                 kind: profile.kind
             )
         }

@@ -1,66 +1,74 @@
-// ProxyMaxx — Firefox companion, background page.
-//
-// The extension owns exactly one thing the Mac app cannot reach: this browser's own
-// proxy setting. It points the browser at the local proxy, reports whether the proxy
-// setting is ours to change, and reads live state from the app over native messaging.
-//
-// It never sees request bodies. Decryption happens in the proxy, not here.
-//
-// Registration order matters. If this script throws while evaluating, the page never
-// registers and the popup gets "Receiving end does not exist" — a blank panel with no
-// explanation. So the message channel is registered first, and everything else is
-// guarded and reports its own failure where the popup can read it.
-
+// Request routing leaves Firefox's browser-wide proxy settings alone.
 const HOST_NAME = "com.proxymaxx.browser";
-
+const SITE_PERMISSION = { origins: ["<all_urls>"] };
+const PASSTHROUGH = [];
 const DEFAULTS = {
-  // The port field, unset until someone types one. It is a fallback for when nothing can be
-  // asked, and it is deliberately not seeded with a number: pointing a browser at a port
-  // nobody confirmed takes every page in that browser down, which is the failure this
-  // ordering exists to prevent.
   port: null,
-  // The last port an engine reported. Kept so a bridge that goes quiet still resolves to
-  // the port that was working, instead of a default that may have moved out from under it.
   knownPort: null,
-  captureLocalhost: false,
-  weOwnProxy: false,
+  captureEnabled: false,
   lastProxyError: null,
 };
-
-/// The refusal when capture is asked for before anything has named a port to capture on.
 const NO_PORT_MESSAGE =
-  "Nothing has reported a port to capture on yet. Start ProxyMaxx or `proxymaxx-cli serve`, then try again — or enter the port in the field below.";
+  "Nothing has reported a capture port yet. Start ProxyMaxx or `proxymaxx-cli serve`, then try again, or enter a port below.";
+const SITE_ACCESS_MESSAGE =
+  "Allow ProxyMaxx access to websites to route their requests through the capture proxy.";
+
+let settings = { ...DEFAULTS };
+let app = { connected: false, reason: "The app has not been queried." };
+let resolved = { port: null, source: "none" };
+let siteAccess = false;
+let privateBrowsingAllowed = false;
+let permissionRevision = 0;
+let requestListenerRegistered = false;
+let listenerError = null;
+let migrationError = null;
+let activePort = null;
+let route = PASSTHROUGH;
+let initialized = false;
+let commandQueue;
 
 function describe(value) {
   return String(value?.message ?? value);
 }
 
-// MARK: - Settings
-
-function getSettings() {
-  return browser.storage.local.get(DEFAULTS);
+async function recordFailure(error) {
+  settings.lastProxyError = { at: Date.now(), error: describe(error) };
+  try {
+    await browser.storage.local.set({ lastProxyError: settings.lastProxyError });
+  } catch (storageError) {
+    console.error("Could not save the Firefox capture error:", storageError);
+  }
 }
 
-/// Firefox's proxy value has no loopback-bypass exception of its own: it either proxies
-/// everything or nothing, so "capture localhost" is carried by proxying at all — there is
-/// no separate <-loopback> entry to opt in with like Chromium. The checkbox stays in the
-/// panel so the state is legible, but either setting routes loopback here.
-function proxyConfig(port) {
-  return {
-    proxyType: "manual",
-    http: `PROXY 127.0.0.1:${port}`,
-    https: `PROXY 127.0.0.1:${port}`,
-    socks: `SOCKS 127.0.0.1:${port}`,
-    socksVersion: 5,
-  };
+function updateRoute() {
+  const port = settings.captureEnabled && siteAccess && requestListenerRegistered && !migrationError ? resolved.port : null;
+  if (activePort === port) return;
+  activePort = port;
+  // An empty array preserves the existing proxy chain. Terminal null prevents
+  // active capture from falling back to that chain when ProxyMaxx is unreachable.
+  route = port === null ? PASSTHROUGH : [{ type: "http", host: "127.0.0.1", port }, null];
 }
 
-function writeProxyConfig(value) {
-  return browser.proxy.settings.set({ value });
+function routeRequest() {
+  // Only a cold background waits for hydration; requests never query storage or the app.
+  return initialized ? route : initialization.then(() => route);
 }
 
-function readProxySetting() {
-  return browser.proxy.settings.get({});
+function registerRequestListener() {
+  if (requestListenerRegistered) return;
+  try {
+    browser.proxy.onRequest.addListener(routeRequest, { urls: ["<all_urls>"] });
+    requestListenerRegistered = true;
+    listenerError = null;
+  } catch (error) {
+    listenerError = `Firefox request routing could not start: ${describe(error)}`;
+  }
+}
+
+async function saveSettings(changes) {
+  await browser.storage.local.set(changes);
+  Object.assign(settings, changes);
+  updateRoute();
 }
 
 // MARK: - The app bridge
@@ -113,158 +121,116 @@ function askApp(timeoutMilliseconds = 1500) {
   });
 }
 
-// MARK: - Commands
+function validPort(port) {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
 
-/// The port the browser should be pointed at, and where that number came from.
-///
-/// The app or the CLI reports where it actually listens, because a busy 9090 makes the
-/// engine re-select a port; that number is remembered so it survives the bridge going
-/// quiet. `port: null` means nothing has ever named one, which is a state to report rather
-/// than a number to invent.
-function resolvePort(app, settings) {
+// Use the app's live port, then its remembered port, then the manual fallback.
+function resolvePort() {
   const reported = app.connected ? app.state?.httpPort : null;
-  if (Number.isInteger(reported) && reported > 0) return { port: reported, source: "app" };
-  if (Number.isInteger(settings.knownPort) && settings.knownPort > 0) {
-    return { port: settings.knownPort, source: "last" };
-  }
-  if (Number.isInteger(settings.port) && settings.port > 0) {
-    return { port: settings.port, source: "manual" };
-  }
+  if (validPort(reported)) return { port: reported, source: "app" };
+  if (validPort(settings.knownPort)) return { port: settings.knownPort, source: "last" };
+  if (validPort(settings.port)) return { port: settings.port, source: "manual" };
   return { port: null, source: "none" };
 }
 
-/// Ask the app once, and remember the port it names.
-async function resolveLivePort() {
-  const settings = await getSettings();
-  const app = await askApp();
-  const resolved = resolvePort(app, settings);
-  if (resolved.source === "app") {
-    await browser.storage.local.set({ knownPort: resolved.port });
+async function refresh() {
+  app = await askApp();
+  const nextPort = resolvePort();
+  if (nextPort.source === "app" && settings.knownPort !== nextPort.port) {
+    await saveSettings({ knownPort: nextPort.port });
   }
-  return resolved;
+  resolved = nextPort;
+  privateBrowsingAllowed = await browser.extension.isAllowedIncognitoAccess();
+  const revision = permissionRevision;
+  const allowed = await browser.permissions.contains(SITE_PERMISSION);
+  if (revision === permissionRevision) siteAccess = allowed;
+  registerRequestListener();
+  updateRoute();
+  if (migrationError || listenerError) await recordFailure(migrationError ?? listenerError);
 }
 
-async function applyIfOurs() {
-  const settings = await getSettings();
-  if (!settings.weOwnProxy) return;
-  const { port } = await resolveLivePort();
-  // Nothing confirmed: leaving the browser on its own settings is the only safe move.
-  if (port === null) return;
-  await writeProxyConfig(proxyConfig(port));
+async function initialize() {
+  const stored = await browser.storage.local.get({
+    ...DEFAULTS,
+    captureEnabled: null,
+    weOwnProxy: false,
+    requestRoutingMigrated: false,
+  });
+  settings = {
+    port: stored.port,
+    knownPort: stored.knownPort,
+    captureEnabled: typeof stored.captureEnabled === "boolean" ? stored.captureEnabled : stored.weOwnProxy === true,
+    lastProxyError: stored.lastProxyError,
+  };
+  if (typeof stored.captureEnabled !== "boolean") {
+    await saveSettings({ captureEnabled: settings.captureEnabled });
+  }
+
+  if (!stored.requestRoutingMigrated) {
+    try {
+      const legacy = await browser.proxy.settings.get({});
+      if (legacy.levelOfControl === "controlled_by_this_extension") {
+        const cleared = await browser.proxy.settings.clear({});
+        if (cleared === false) throw new Error("Firefox did not clear the previous ProxyMaxx proxy setting.");
+      }
+      await browser.storage.local.set({ requestRoutingMigrated: true });
+    } catch (error) {
+      // Leave migration pending so a later background start can finish it.
+      migrationError = `Could not remove the previous Firefox proxy setting; request routing is blocked: ${describe(error)}`;
+      await recordFailure(migrationError);
+    }
+  }
+  await browser.storage.local.remove(["weOwnProxy", "captureLocalhost", "initFailure"]);
+  await refresh();
 }
 
-/// Turn capture on, or say why it cannot be.
-///
-/// Firefox shares one browser-global proxy setting with no restoration snapshot, so unlike
-/// Chromium there is no level-of-control to lose: our value is the value.
-async function enable() {
-  const settings = await getSettings();
-  const { port } = await resolveLivePort();
-  if (port === null) return NO_PORT_MESSAGE;
-  await writeProxyConfig(proxyConfig(port));
-  await browser.storage.local.set({ weOwnProxy: true, lastProxyError: null });
-  return null;
-}
-
-async function disable() {
-  await writeProxyConfig({ proxyType: "none" });
-  await browser.storage.local.set({ weOwnProxy: false });
-}
-
-function buildReport(settings, setting, app, resolved, extra) {
+function report(extra = {}) {
   return {
+    captureEnabled: settings.captureEnabled,
+    routingActive: activePort !== null,
+    activePort,
+    siteAccess,
+    privateBrowsingAllowed,
     port: settings.port,
-    // What the browser should be pointed at, and which of the three places that number came
-    // from. Both are distinct from the port field, because an engine can move its port out
-    // from under the field.
     effectivePort: resolved.port,
     portSource: resolved.source,
-    captureLocalhost: settings.captureLocalhost,
-    weOwnProxy: settings.weOwnProxy,
     lastProxyError: settings.lastProxyError,
-    proxyType: setting?.value?.proxyType ?? "unknown",
     app,
     ...extra,
   };
 }
 
-async function report(extra = {}) {
-  const settings = await getSettings();
-  let setting = null;
-  try {
-    setting = await readProxySetting();
-  } catch {
-    // Leave setting null; the report names "unknown" rather than failing wholesale.
-  }
-  const app = await askApp();
-  const resolved = resolvePort(app, settings);
-  if (resolved.source === "app") {
-    await browser.storage.local.set({ knownPort: resolved.port });
-  }
-
-  // Self-heal a stale port. The app re-selects when its preferred port is busy, and a
-  // browser left pointing at the old one captures nothing while looking perfectly
-  // configured. Cheaper to correct here than to expect someone to notice the difference.
-  const appliedPort = extractAppliedPort(setting);
-  const stalePort = Number.isInteger(appliedPort) && resolved.port !== null && appliedPort !== resolved.port;
-  if (settings.weOwnProxy && resolved.port !== null && stalePort) {
-    try {
-      await writeProxyConfig(proxyConfig(resolved.port));
-      setting = await readProxySetting();
-    } catch {
-      // Fall through: the report still names the port we could not apply.
-    }
-  }
-
-  return buildReport(settings, setting, app, resolved, extra);
-}
-
-/// The port currently applied in the browser, pulled back out of the setting
-/// `browser.proxy.settings.get` gave us. Firefox hands back PAC-style strings
-/// (`"PROXY 127.0.0.1:9090"`, sometimes the comma form after a reload), so take the last
-/// number that looks like a port and tolerate both spellings.
-function extractAppliedPort(setting) {
-  const value = setting?.value?.https;
-  if (typeof value !== "string") return null;
-  const match = value.match(/:(\d+)\D*$/) || value.match(/,(\d+)\D*$/);
-  const port = match ? parseInt(match[1], 10) : NaN;
-  return Number.isInteger(port) && port > 0 ? port : null;
-}
-
 async function handle(command, message) {
   switch (command) {
     case "status":
+      await refresh();
       return report();
-    case "enable":
-      // A refusal is a message about the action, so it rides along with a normal report
-      // instead of replacing it: the panel stays readable and capture simply stays off.
-      return report({ enableError: await enable() });
+    case "enable": {
+      await refresh();
+      const enableError = migrationError ?? (!siteAccess ? SITE_ACCESS_MESSAGE : listenerError ?? (resolved.port === null ? NO_PORT_MESSAGE : null));
+      if (enableError) {
+        await recordFailure(enableError);
+        return report({ enableError });
+      }
+      await saveSettings({ captureEnabled: true });
+      return report({ enableError: null });
+    }
     case "disable":
-      await disable();
-      return report();
-    case "setLocalhost":
-      await browser.storage.local.set({ captureLocalhost: Boolean(message.value) });
-      await applyIfOurs();
+      await saveSettings({ captureEnabled: false });
+      await refresh();
       return report();
     case "setPort": {
-      // An empty field clears the override, which is how the port goes back to whatever the
-      // app reports. It is the only way to undo a wrong number.
       const typed = String(message.value ?? "").trim();
-      if (typed === "") {
-        await browser.storage.local.set({ port: null });
-        await applyIfOurs();
-        return report();
-      }
-      const port = Number(typed);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        return { error: "The port must be between 1 and 65535." };
-      }
-      await browser.storage.local.set({ port });
-      await applyIfOurs();
+      const port = typed === "" ? null : Number(typed);
+      if (port !== null && !validPort(port)) return { error: "The port must be between 1 and 65535." };
+      await saveSettings({ port });
+      await refresh();
       return report();
     }
     case "clearError":
-      await browser.storage.local.set({ lastProxyError: null });
+      await saveSettings({ lastProxyError: null });
+      await refresh();
       return report();
     case "ping":
       return { ok: true, pong: true, version: browser.runtime.getManifest().version };
@@ -273,50 +239,35 @@ async function handle(command, message) {
   }
 }
 
-// MARK: - Registration
-
-// First, and unconditional: this is the one registration the popup cannot survive without.
-browser.runtime.onMessage.addListener((message, _sender, respond) => {
-  handle(message?.cmd, message).then(respond, (error) => respond({ error: describe(error) }));
-  return true; // Keep the channel open for the asynchronous answer.
-});
-
-/// Everything that went wrong while registering the optional hooks, so the popup can name
-/// it instead of showing a blank panel.
-const initFailures = [];
-
-function recordInitFailure(message) {
-  initFailures.push(message);
-  const pending = browser.storage?.local?.set?.({ initFailure: message });
-  if (pending && typeof pending.catch === "function") pending.catch(() => {});
-}
-
-/// Register a background hook, or record why it could not be. An older or stripped
-/// Firefox build may not expose every event; a missing optional event must never take
-/// the whole page down with it.
-function registerSafely(label, register) {
-  try {
-    register();
-  } catch (error) {
-    recordInitFailure(`${label}: ${describe(error)}`);
+function permissionsChanged(permissions, removed) {
+  if (!permissions.origins?.length) return;
+  permissionRevision += 1;
+  if (removed) {
+    siteAccess = false;
+    updateRoute();
   }
+  commandQueue = commandQueue.then(refresh).catch(recordFailure);
 }
 
-registerSafely("proxy re-assertion", () => {
-  browser.runtime.onStartup.addListener(() => {
-    applyIfOurs().catch(() => {});
+// Register wakeup hooks synchronously, before storage or native messaging can yield.
+browser.runtime.onMessage.addListener((message) => {
+  const response = commandQueue.then(() => handle(message?.cmd, message)).catch(async (error) => {
+    await recordFailure(error);
+    return { error: describe(error) };
   });
+  commandQueue = response;
+  return response;
 });
-
-registerSafely("first-install setup", () => {
-  browser.runtime.onInstalled.addListener(() => {
-    applyIfOurs().catch(() => {});
-  });
+registerRequestListener();
+browser.proxy.onError.addListener((error) => {
+  void recordFailure(error);
 });
+browser.permissions.onAdded.addListener((permissions) => permissionsChanged(permissions, false));
+browser.permissions.onRemoved.addListener((permissions) => permissionsChanged(permissions, true));
+browser.runtime.onStartup.addListener(() => initialization);
+browser.runtime.onInstalled.addListener(() => initialization);
 
-// Everything optional registered. Clear a failure left by an earlier build — but never
-// the one this run just recorded.
-if (initFailures.length === 0) {
-  const pending = browser.storage?.local?.remove?.("initFailure");
-  if (pending && typeof pending.catch === "function") pending.catch(() => {});
-}
+const initialization = initialize().catch(recordFailure).finally(() => {
+  initialized = true;
+});
+commandQueue = initialization;

@@ -1,18 +1,9 @@
-// ProxyMaxx — Firefox popup.
-//
-// Reads one status object from the background page and renders it. Every verdict here is
-// derived from something real: the browser's proxy setting, or live state from the Mac app.
-// Nothing is guessed.
-//
-// If the background page cannot be reached — it failed to register, or it is being
-// reloaded — this does not show a blank panel. It reads what it can from its own context
-// and says what is broken. A diagnostics panel that shows nothing is worse than one that
-// shows less.
+// Routing is background listener state, not proof of network capture.
+// If the background is unavailable, keep the readable facts and disable writes.
 
 const bootWarning = document.getElementById("boot");
 
-/// Put the reason on screen. Without this, an uncaught error leaves the panel showing its
-/// placeholder HTML, which reads exactly like a page that never answered.
+// Replace placeholder HTML with the script failure.
 function reportStartupFailure(message) {
   if (!bootWarning) return;
   bootWarning.hidden = false;
@@ -29,110 +20,88 @@ const elements = {
   version: document.getElementById("version"),
   capture: document.getElementById("capture"),
   captureDetail: document.getElementById("capture-detail"),
-  mode: document.getElementById("fact-mode"),
+  routing: document.getElementById("fact-routing"),
+  siteAccess: document.getElementById("fact-site-access"),
+  scope: document.getElementById("fact-scope"),
+  privateHelp: document.getElementById("private-help"),
   app: document.getElementById("fact-app"),
   ca: document.getElementById("fact-ca"),
   port: document.getElementById("opt-port"),
   error: document.getElementById("error"),
+  errorMessage: document.getElementById("error-message"),
+  dismissError: document.getElementById("dismiss-error"),
   retry: document.getElementById("retry"),
   checks: document.getElementById("checks"),
 };
 
-/// How to describe where the port in use came from, so a number nothing can account for is
-/// never presented as though it had been read from the app.
-const PORT_ORIGINS = {
-  app: "the port the app reported",
-  last: "the port the app last reported",
-  manual: "the port you set",
-};
+let currentStatus = null;
+let capturePending = false;
 
 function check(verdict, state, text) {
   return { verdict, state, text };
 }
 
-/// The one thing a person can do about a bridge that is not answering, named in the panel
-/// because the failure is otherwise invisible: nothing about the browser or the extension
-/// looks wrong.
 const BRIDGE_FIX =
-  "Open ProxyMaxx and press Install Browser Extension…, then press Reload on this extension's card in about:addons.";
+  "Open ProxyMaxx and press Install Browser Extension…, then use Check again. For a temporary add-on, press Reload in about:debugging#/runtime/this-firefox; for an installed add-on, restart Firefox.";
 
 function buildChecks(status) {
-  const { proxyType, app } = status;
+  const { captureEnabled, routingActive, activePort, siteAccess, app } = status;
   const connected = app.connected;
   const state = connected ? app.state : null;
   const checks = [];
-  const port = status.effectivePort;
 
-  checks.push(
-    status.weOwnProxy && port !== null
-      ? check("Applied", "ok", `This browser sends HTTP and HTTPS to 127.0.0.1:${port}.`)
-      : check("Not applied", "warn", `This browser resolves proxies as "${proxyType}". Turn capture on.`)
-  );
+  if (status.workerFailure) {
+    checks.push(check("Unknown", "warn", "The background is unavailable, so request routing cannot be confirmed."));
+  } else if (routingActive) {
+    checks.push(check("Configured", "ok", `The request listener selects 127.0.0.1:${activePort} for HTTP and HTTPS. This does not confirm that requests reach the app.`));
+  } else if (captureEnabled) {
+    checks.push(check("Waiting", "warn", "Capture is requested, but request routing is not configured."));
+  } else {
+    checks.push(check("Off", "muted", "ProxyMaxx is not selecting request routes. Firefox's existing proxy settings may still apply."));
+  }
 
-  // Only ever claim what the app actually told us. "Cannot be reached" and "nothing is
-  // listening" are different states, and the difference is the whole diagnosis.
-  if (status.weOwnProxy && !connected && port !== null) {
-  checks.push(
-    check("Unverified", "warn", `Capture is on at 127.0.0.1:${port}, ${PORT_ORIGINS[status.portSource] ?? "a remembered port"}, but the app is not answering now to confirm anything is listening there. If pages fail to load, turn capture off.`)
-  );
-  } else if (status.weOwnProxy && connected && state.proxyListening === false) {
-    checks.push(
-      check("Nothing listening", "warn", `The app is running but nothing accepts connections on 127.0.0.1:${state.httpPort}, so every request in this browser fails. Check the port in the app.`)
-    );
-  } else if (status.weOwnProxy && connected) {
-    checks.push(
-      check("Listening", "ok", `The app accepts connections on 127.0.0.1:${state.httpPort}.`)
-    );
+  if (siteAccess !== true) {
+    checks.push(check("Site access", "warn", "Capture needs access to all websites. Turn capture on and allow Firefox's website-access request."));
+  }
+
+  if (routingActive && !connected) {
+    checks.push(check("Unverified", "warn", `Routing is configured for ${activePort}, but the app is not answering to confirm a listener. If pages fail to load, turn capture off.`));
+  } else if (routingActive && connected && activePort !== state.httpPort) {
+    checks.push(check("Port differs", "warn", `Routing selects ${activePort}, but the app reports ${state.httpPort}. Use Check again to refresh the route.`));
+  } else if (routingActive && connected && state.proxyListening === false) {
+    checks.push(check("No listener", "warn", `The app reports that nothing accepts connections on 127.0.0.1:${state.httpPort}. Proxied requests will fail.`));
+  } else if (routingActive && connected && state.proxyListening === true) {
+    checks.push(check("Listening", "ok", `The app reports a listener on 127.0.0.1:${state.httpPort}.`));
   }
 
   if (connected && status.port !== null && status.effectivePort !== status.port) {
-    checks.push(
-      check("App's port", "muted", `The app listens on ${state.httpPort}, so the browser is pointed there. The port field above is only the fallback for when the app cannot be asked.`)
-    );
+    checks.push(check("App's port", "muted", `The app reports ${state.httpPort}, which takes priority over the fallback port field.`));
   }
-
-  if (status.weOwnProxy && status.portSource === "last") {
-    checks.push(
-      check("Remembered", "muted", `The app is not answering, so the browser is still pointed at ${status.effectivePort}, the last port it reported.`)
-    );
+  if (status.portSource === "last") {
+    checks.push(check("Remembered", "muted", `The selected port is ${status.effectivePort}, the port the app last reported. It takes priority over the manual fallback.`));
   }
-
-  if (status.weOwnProxy && port === null) {
-    checks.push(
-      check("No port", "warn", `Capture has no confirmed port, so this browser was left on its own settings. ${BRIDGE_FIX}`)
-    );
+  if (status.effectivePort === null && !status.workerFailure) {
+    checks.push(check("No port", "warn", `Connect the app or enter its HTTP port as a fallback. ${BRIDGE_FIX}`));
   }
 
   if (!connected) {
-    checks.push(check("Bridge", "warn", `The app is not answering: ${app.reason} The port, the CA verdict and the listener check all come over this bridge. ${BRIDGE_FIX}`));
+    checks.push(check("Bridge", "warn", `The app is not answering: ${app.reason} ${BRIDGE_FIX}`));
   } else if (state.caTrusted) {
-    checks.push(check("Trusted", "ok", "The app's root CA is trusted, so HTTPS can be decrypted."));
+    checks.push(check("App CA", "ok", "The app reports its root CA as trusted. Firefox must also trust that CA; import it into Firefox's Authorities if HTTPS certificate errors remain."));
   } else {
-    checks.push(check("Missing", "warn", "Install and trust the root CA in the app. Without it every HTTPS request fails instead of appearing."));
+    checks.push(check("Missing CA", "warn", "Install and trust the root CA in the app and in Firefox. Without trust, intercepted HTTPS requests fail certificate validation."));
   }
 
-  checks.push(
-    check("Session only", "muted", "The proxy value stays set until this page turns it off or the browser is reset; it is worth pressing disable before quitting if you want the pre-capture behaviour back for certain.")
-  );
-
-  checks.push(
-    check("Direct too", "muted", "Firefox's proxy value has no loopback exception, so http://localhost is sent to the app along with everything else."),
-  );
-
-  checks.push(
-    check("Not ours", "muted", "Connections opened before the switch keep their old route until the tab is reloaded.")
-  );
-
-  checks.push(
-    check("By design", "muted", "Hosts that pin a certificate are never decrypted, with or without a trusted CA.")
-  );
-
+  checks.push(check("When off", "muted", "Turning capture off removes this extension's request routing. Firefox, system, or other extension proxy settings may still route traffic to a proxy."));
+  checks.push(check("Reload tabs", "muted", "Reload tabs after changing capture. Existing connections may keep their previous route."));
+  checks.push(check("Pinned TLS", "muted", "Certificate pinning can prevent HTTPS decryption even when the root CA is trusted."));
   return checks;
 }
 
-function showError(text) {
+function showError(text, dismissible = false) {
   elements.error.hidden = false;
-  elements.error.textContent = text;
+  elements.errorMessage.textContent = text;
+  elements.dismissError.hidden = !dismissible;
 }
 
 function renderChecks(checks) {
@@ -154,52 +123,72 @@ function renderChecks(checks) {
 function renderFacts(status) {
   const connected = status.app.connected;
   const state = connected ? status.app.state : null;
-  const port = status.effectivePort;
+  const port = status.activePort;
 
   elements.appState.textContent = connected ? "App connected" : "App not answering";
   elements.appState.classList.toggle("ok", connected);
 
-  elements.mode.textContent = status.weOwnProxy && port !== null ? "manual" : status.proxyType;
+  elements.routing.textContent = status.workerFailure
+    ? "unknown"
+    : status.routingActive ? `configured on ${port}` : "not configured";
+  elements.siteAccess.textContent = status.siteAccess ? "all websites allowed" : "permission needed";
+  elements.scope.textContent = status.privateBrowsingAllowed === true
+    ? "normal and private windows"
+    : status.privateBrowsingAllowed === false ? "normal windows" : "private access unknown";
+  elements.privateHelp.hidden = status.privateBrowsingAllowed === true;
   elements.app.textContent = !connected
     ? "not reachable"
     : state.proxyListening === false
       ? `nothing accepting connections on ${state.httpPort}`
-      : `listening on ${state.httpPort}${state.socksPort ? `, SOCKS5 ${state.socksPort}` : ""}`;
-  elements.ca.textContent = connected ? (state.caTrusted ? "ready" : "root CA not trusted") : "unknown";
+      : state.proxyListening === true
+        ? `listening on ${state.httpPort}${state.socksPort ? `, SOCKS5 ${state.socksPort}` : ""}`
+        : `port ${state.httpPort}; listener unconfirmed`;
+  elements.ca.textContent = connected ? (state.caTrusted ? "app CA trusted; Firefox trust required" : "root CA not trusted") : "unknown";
 
   elements.port.value = status.port === null ? "" : String(status.port);
 
-  elements.capture.setAttribute("aria-pressed", String(status.weOwnProxy));
+  elements.capture.setAttribute("aria-pressed", String(status.captureEnabled));
+  elements.capture.dataset.command = status.captureEnabled ? "disable" : "enable";
 
-  if (!status.weOwnProxy) {
-    elements.captureDetail.textContent = "Off — the browser's own proxy settings apply";
-  } else if (port === null) {
-    elements.captureDetail.textContent = "On — no confirmed port";
+  if (status.workerFailure) {
+    elements.captureDetail.textContent = status.captureEnabled
+      ? "Capture requested; routing unknown"
+      : "Routing unknown; background unavailable";
+  } else if (!status.captureEnabled) {
+    elements.captureDetail.textContent = status.siteAccess
+      ? "Off: click to configure request routing"
+      : "Off: click to allow website access and capture";
+  } else if (!status.routingActive) {
+    elements.captureDetail.textContent = status.siteAccess
+      ? "Requested; routing not configured. Click to turn off"
+      : "Requested; website access needed. Click to turn off";
   } else if (!connected) {
-    elements.captureDetail.textContent = `On — 127.0.0.1:${port}, unconfirmed`;
+    elements.captureDetail.textContent = `On: route to ${port}; app unconfirmed`;
+  } else if (port !== state.httpPort) {
+    elements.captureDetail.textContent = `On: route to ${port}; app reports ${state.httpPort}`;
   } else if (state.proxyListening === false) {
-    elements.captureDetail.textContent = `On — nothing answering on 127.0.0.1:${port}`;
+    elements.captureDetail.textContent = `On: no listener on ${port}`;
   } else {
-    elements.captureDetail.textContent = `On — 127.0.0.1:${port}`;
+    elements.captureDetail.textContent = `On: route to 127.0.0.1:${port}`;
   }
 
-  // Starting the app and reloading the extension both happen outside this panel, so
-  // re-reading the bridge has to be one click rather than closing and reopening the popup.
-  elements.retry.hidden = connected;
+  elements.retry.hidden = connected && !status.workerFailure &&
+    (!status.captureEnabled || (status.routingActive && port === state.httpPort && state.proxyListening === true));
 }
 
 function render(status) {
   if (!status || status.error) {
     showError(status?.error ?? "The extension could not read its own state.");
     elements.appState.textContent = "Unavailable";
+    elements.retry.hidden = false;
     return;
   }
 
+  currentStatus = status;
   renderFacts(status);
 
   if (status.workerFailure) {
-    // The background page is gone, so nothing can be written. Say so, disable the controls
-    // that would silently do nothing, and keep the facts read from here.
+    // The background is unavailable; only reads are safe here.
     elements.appState.textContent = "Background not running";
     elements.appState.classList.remove("ok");
     elements.capture.disabled = true;
@@ -210,26 +199,20 @@ function render(status) {
       : "";
     showError(
       `${status.workerFailure.reason}${detail} ` +
-        "Open about:addons, find ProxyMaxx, and press Reload. If an Errors button appears next to it, open that and copy the message."
+        "For a temporary add-on, open about:debugging#/runtime/this-firefox and press Reload under ProxyMaxx. Press Inspect there to read its console errors. For an installed add-on, restart Firefox."
     );
   } else {
-    elements.capture.disabled = false;
+    elements.capture.disabled = capturePending;
     elements.port.disabled = false;
     elements.error.hidden = true;
-    elements.error.title = "";
-  }
-
-  // A refused enable is a message about the action, not a broken extension, so it goes in
-  // the error line without taking the panel down.
-  if (status.enableError) {
-    showError(status.enableError);
-  }
-
-  if (status.lastProxyError) {
-    const error = status.lastProxyError;
-    const when = new Date(error.at);
-    showError(`Proxy error at ${when.toLocaleTimeString()}: ${error.error}${error.details ? ` — ${error.details}` : ""}`);
-    elements.error.title = "Click to dismiss";
+    elements.dismissError.hidden = true;
+    if (status.enableError) {
+      showError(status.enableError);
+    } else if (status.lastProxyError) {
+      const error = status.lastProxyError;
+      const when = new Date(error.at);
+      showError(`Proxy error at ${when.toLocaleTimeString()}: ${error.error}`, true);
+    }
   }
 
   renderChecks(buildChecks(status));
@@ -237,8 +220,7 @@ function render(status) {
 
 // MARK: - Talking to the background page
 
-/// Resolve or reject within `ms`. A hung channel is worse than a failed one: with no
-/// deadline the popup sits on "Checking…" forever and says nothing.
+// Bound messaging so an unavailable background cannot leave "Checking…" forever.
 function withTimeout(promise, ms, label) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} did not answer within ${ms} ms.`)), ms);
@@ -259,13 +241,28 @@ async function readStored(key, fallback) {
 }
 
 async function degradedStatus(reason) {
+  let siteAccess = false;
+  let privateBrowsingAllowed = null;
+  try {
+    siteAccess = await withTimeout(browser.permissions.contains({ origins: ["<all_urls>"] }), 800, "Website access");
+  } catch {
+    // An unavailable permission check cannot establish access.
+  }
+  try {
+    privateBrowsingAllowed = await withTimeout(browser.extension.isAllowedIncognitoAccess(), 800, "Private-window access");
+  } catch {
+    // Unknown private access is distinct from a denied permission.
+  }
   return {
+    captureEnabled: await readStored("captureEnabled", false),
+    routingActive: false,
+    activePort: null,
+    siteAccess,
+    privateBrowsingAllowed,
     port: await readStored("port", null),
     effectivePort: null,
     portSource: "none",
-    weOwnProxy: await readStored("weOwnProxy", false),
     lastProxyError: await readStored("lastProxyError", null),
-    proxyType: "unknown",
     app: { connected: false, reason: "The background page is not running, so the app cannot be asked." },
     workerFailure: { reason, initFailure: await readStored("initFailure", null) },
   };
@@ -274,9 +271,7 @@ async function degradedStatus(reason) {
 const PAGE_TIMEOUT_LABEL = "The background page";
 
 async function send(command, extra = {}, attempt = 1) {
-  // The first attempt waits like a person would; the retry is short, because a page that
-  // is merely not registered yet fails fast. Two long waits would leave the panel staring
-  // at "Checking…" for five seconds before it admits anything is wrong.
+  // Preserve the short second attempt for background registration races.
   const timeout = attempt === 1 ? 1800 : 800;
 
   let status;
@@ -285,8 +280,7 @@ async function send(command, extra = {}, attempt = 1) {
   } catch (error) {
     const reason = String(error?.message ?? error);
     if (attempt === 1) {
-      // Covers the first message racing the page's registration, and the page being
-      // torn down mid-request.
+      // The background may be registering or unloading.
       await new Promise((resolve) => setTimeout(resolve, 300));
       return send(command, extra, 2);
     }
@@ -304,16 +298,34 @@ async function send(command, extra = {}, attempt = 1) {
 
 // MARK: - Wiring
 
-// Always visible, before anything can fail: if this number is not the version you just
-// built, the browser is still running the previous files and no other result means anything.
+// Show the loaded version even if later messaging fails.
 try {
   elements.version.textContent = `v${browser.runtime.getManifest().version}`;
 } catch {
-  // Leave it blank rather than blocking the panel.
+  // Keep the static version if the runtime API is unavailable.
 }
 
-elements.capture.addEventListener("click", () => {
-  send(elements.capture.getAttribute("aria-pressed") === "true" ? "disable" : "enable");
+elements.capture.addEventListener("click", async () => {
+  if (!currentStatus || capturePending) return;
+  const command = currentStatus.captureEnabled ? "disable" : "enable";
+  capturePending = true;
+  elements.capture.disabled = true;
+  try {
+    if (command === "enable" && !currentStatus.siteAccess) {
+      // Call before any await so Firefox retains the capture click's user gesture.
+      const granted = await browser.permissions.request({ origins: ["<all_urls>"] });
+      if (!granted) {
+        showError("Website access was not granted. Capture remains off. Click Capture this browser to try again.");
+        return;
+      }
+    }
+    await send(command);
+  } catch (error) {
+    showError(String(error?.message ?? error));
+  } finally {
+    capturePending = false;
+    elements.capture.disabled = !currentStatus || Boolean(currentStatus.workerFailure);
+  }
 });
 
 elements.port.addEventListener("change", () => {
@@ -324,12 +336,11 @@ elements.retry.addEventListener("click", () => {
   send("status");
 });
 
-elements.error.addEventListener("click", () => {
+elements.dismissError.addEventListener("click", () => {
   send("clearError");
 });
 
-// Everything above is synchronous, so reaching this line means the script ran to the end.
-// Anything that failed before it left the placeholder text on screen instead of silence.
+// Reaching the end means the synchronous setup completed.
 if (bootWarning) bootWarning.hidden = true;
 
 send("status");

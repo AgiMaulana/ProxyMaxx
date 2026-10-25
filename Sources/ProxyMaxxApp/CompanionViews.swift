@@ -2,8 +2,7 @@ import SwiftUI
 import AppKit
 import SystemKit
 
-/// The result of installing the browser companion: the folder the browser loads, and the
-/// host manifests written for it.
+/// Installation artifacts and native host status for the browser companions.
 struct BrowserExtensionPanelView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -28,6 +27,10 @@ struct BrowserExtensionPanelView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text("browser.panel.steps")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("browser.panel.firefoxSteps")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

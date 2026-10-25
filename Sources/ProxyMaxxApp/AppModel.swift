@@ -351,9 +351,7 @@ final class AppModel: ObservableObject {
     /// Manifests written by the last install, so the log can name the browsers reached.
     @Published private(set) var browserBridgeManifests: [String] = []
 
-    /// Where the last install staged the extension, and the browsers it wrote host
-    /// manifests for. The panel shows both: the browser loads the folder, and the
-    /// manifests are what let the extension reach the app.
+    /// The installed artifacts' folder and browsers reached by the native host installer.
     @Published private(set) var browserExtensionPath: String?
     @Published private(set) var browserExtensionBrowsers: [String] = []
 
@@ -388,13 +386,7 @@ final class AppModel: ObservableObject {
         )
     }
 
-    /// Install the native messaging host manifests and stage the extension, then open the
-    /// panel that names the folder.
-    ///
-    /// Chromium refuses to let anything install an extension on the user's behalf, so
-    /// "install" means exactly three things: write the manifests that authorise the
-    /// extension's origin, copy the extension somewhere the browser can reach and Finder
-    /// can show, and tell the user where it went. Claiming more than that would be a lie.
+    /// Stage both browser artifacts and native host manifests, then show installation steps.
     func installBrowserExtension() {
         guard let hostBinary = BrowserBridge.resolveHostBinary() else {
             lastError = L10n.string("error.bridgeMissing")

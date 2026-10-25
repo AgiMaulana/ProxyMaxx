@@ -343,13 +343,14 @@
 
 /* MARK: Companion panels */
 "browser.panel.title" = "Browser Extension";
-"browser.panel.intro" = "The extension is staged in this folder so the browser can load it. Browsers do not allow an app to install an extension for you.";
+"browser.panel.intro" = "This folder contains the Chromium extension folder and the Firefox .xpi file. Choose the artifact for your browser; the app installs the native bridge, but you must load the extension in the browser.";
 "browser.panel.hosts" = "Native host installed for %@.";
-"browser.panel.noBrowser" = "No Chromium browser profile was found. Open the browser once, then install again to write its host manifest.";
-"browser.panel.steps" = "To finish, open chrome://extensions, turn on Developer mode, choose Load unpacked, and select the folder above. If the extension is already loaded, press Reload on its card.";
+"browser.panel.noBrowser" = "No Chromium or Firefox browser profile was found. Open the browser once, then install again to write its host manifest.";
+"browser.panel.steps" = "Chromium: open chrome://extensions, enable Developer mode, choose Load unpacked, and select proxymaxx-extension inside the folder above. For an update, press Reload on its card.";
+"browser.panel.firefoxSteps" = "Firefox: open about:debugging#/runtime/this-firefox, choose Load Temporary Add-on…, and select proxymaxx-firefox-extension.xpi inside the folder above. Unsigned builds last until Firefox restarts. For a Mozilla-signed .xpi, use about:addons → gear menu → Install Add-on From File… instead. Start ProxyMaxx, open the extension and click Capture this browser. Allow website access if Firefox asks. Private-window access is optional; normal-window capture does not need it. For a temporary update, press Reload in about:debugging.";
 "browser.panel.bridgeReady" = "The browser bridge answered: the proxy is listening on 127.0.0.1:%@.";
 "browser.panel.bridgeIdle" = "The browser bridge answered, but no proxy is running yet. Start the proxy, then open the extension's popup again.";
-"browser.panel.bridgeBroken" = "The browser bridge did not answer: %@. Press Reload on the extension's card in chrome://extensions, or install again.";
+"browser.panel.bridgeBroken" = "The browser bridge did not answer: %@. Reload the extension in chrome://extensions or Firefox's about:debugging, or install the bridge again.";
 "cli.panel.title" = "Command Line Tool";
 "cli.panel.intro" = "The command line tool is bundled with the app. Run it from Terminal, or link it into your PATH.";
 "cli.panel.note" = "It drives the same engine and reads the same session as this window.";
