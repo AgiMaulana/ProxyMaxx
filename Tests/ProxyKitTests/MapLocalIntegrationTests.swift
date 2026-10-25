@@ -85,30 +85,41 @@ final class MapLocalIntegrationTests: XCTestCase {
         XCTAssertEqual(result.output, "first")
     }
 
-    func testScenarioActivationChangesTheResponseServedByTheProxy() throws {
+    func testImportedBundlesSwitchTheResponseAndDeactivateToTheOrigin() throws {
         let plain = try startPlainProxy(originBody: "from-origin")
         defer { plain.stop() }
 
         let visitFile = try writeFile("visit", name: "visit.txt")
         let emptyCartFile = try writeFile("empty-cart", name: "empty-cart.txt")
-        var rules = [
-            pathRule("/mapped", name: "consult-ok", destination: .file(visitFile.path)),
-            pathRule("/mapped", name: "consult-empty", destination: .file(emptyCartFile.path)),
-        ]
-        let visit = MapLocalScenario(name: "visit", ruleIDs: [rules[0].id])
-        let emptyCart = MapLocalScenario(name: "empty-cart", ruleIDs: [rules[1].id])
+        let visitZIP = scratch.appendingPathComponent("visit.zip")
+        let emptyCartZIP = scratch.appendingPathComponent("empty-cart.zip")
+        try MapLocalBundleArchive.exportBundle(
+            rules: [pathRule("/mapped", destination: .file(visitFile.path))], name: "visit", to: visitZIP
+        )
+        try MapLocalBundleArchive.exportBundle(
+            rules: [pathRule("/mapped", destination: .file(emptyCartFile.path))], name: "empty-cart", to: emptyCartZIP
+        )
+        var file = RuleFile()
+        let storage = scratch.appendingPathComponent("managed")
+        let visit = try MapLocalBundleArchive.importBundle(from: visitZIP, into: &file, storageDirectory: storage)
+        let emptyCart = try MapLocalBundleArchive.importBundle(from: emptyCartZIP, into: &file, storageDirectory: storage)
+        try FileManager.default.removeItem(at: visitFile)
+        try FileManager.default.removeItem(at: emptyCartFile)
 
-        XCTAssertEqual(MapLocalScenarioRunner.activate(visit, in: &rules), 1)
-        plain.engine.mapLocalRules = rules
+        try MapLocalBundleState.activate(id: visit.id, in: &file)
+        plain.engine.mapLocalRules = file.mapLocalRules
         let visitResult = try curlThroughProxy(plain.engine, url: "http://127.0.0.1:\(plain.port)/mapped")
         XCTAssertEqual(visitResult.output, "visit")
-        XCTAssertEqual(rules.map(\.isEnabled), [true, false])
 
-        XCTAssertEqual(MapLocalScenarioRunner.activate(emptyCart, in: &rules), 1)
-        plain.engine.mapLocalRules = rules
+        try MapLocalBundleState.activate(id: emptyCart.id, in: &file)
+        plain.engine.mapLocalRules = file.mapLocalRules
         let emptyCartResult = try curlThroughProxy(plain.engine, url: "http://127.0.0.1:\(plain.port)/mapped")
         XCTAssertEqual(emptyCartResult.output, "empty-cart")
-        XCTAssertEqual(rules.map(\.isEnabled), [false, true])
+
+        try MapLocalBundleState.deactivate(id: emptyCart.id, in: &file)
+        plain.engine.mapLocalRules = file.mapLocalRules
+        let originResult = try curlThroughProxy(plain.engine, url: "http://127.0.0.1:\(plain.port)/mapped")
+        XCTAssertEqual(originResult.output, "from-origin")
     }
 
     func testFullHTTPMessageFileIsServedWithItsStatusAndHeaders() throws {

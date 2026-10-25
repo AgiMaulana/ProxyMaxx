@@ -28,6 +28,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.7"),
         .package(url: "https://github.com/f-meloni/SwiftBrotli.git", from: "0.1.0"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
     ],
     targets: [
         /// Product identity shared by every component that writes user data.
@@ -52,7 +53,10 @@ let package = Package(
             ]
         ),
 
-        .target(name: "RuleKit", dependencies: ["FlowKit", "Branding"]),
+        .target(
+            name: "RuleKit",
+            dependencies: ["FlowKit", "Branding", .product(name: "ZIPFoundation", package: "ZIPFoundation")]
+        ),
 
         .target(
             name: "ProxyKit",
@@ -112,7 +116,10 @@ let package = Package(
                 .product(name: "SwiftBrotli", package: "SwiftBrotli"),
             ]
         ),
-        .testTarget(name: "RuleKitTests", dependencies: ["RuleKit"]),
+        .testTarget(
+            name: "RuleKitTests",
+            dependencies: ["RuleKit", .product(name: "ZIPFoundation", package: "ZIPFoundation")]
+        ),
         .testTarget(name: "CodeGenKitTests", dependencies: ["CodeGenKit", "FlowKit"]),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
         .testTarget(name: "SystemKitTests", dependencies: ["SystemKit"]),

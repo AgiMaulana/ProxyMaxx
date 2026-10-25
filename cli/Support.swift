@@ -11,21 +11,27 @@ struct Arguments {
     let positional: [String]
     /// Values for flags that take one, keyed without the leading dashes.
     let values: [String: String]
+    private let positionalIndices: [Int]
 
-    init(_ arguments: [String]) {
+    init(_ arguments: [String], inheritedValues: [String: String] = [:]) {
         self.tokens = arguments
         var positional: [String] = []
-        var values: [String: String] = [:]
+        var positionalIndices: [Int] = []
+        var values = inheritedValues
 
         var index = 0
         while index < arguments.count {
             let token = arguments[index]
             guard let name = Self.optionName(token) else {
                 positional.append(token)
+                positionalIndices.append(index)
                 index += 1
                 continue
             }
-            if index + 1 < arguments.count, Self.optionName(arguments[index + 1]) == nil {
+            if Self.booleanOptions.contains(name) {
+                values[name] = ""
+                index += 1
+            } else if index + 1 < arguments.count, Self.optionName(arguments[index + 1]) == nil {
                 values[name] = arguments[index + 1]
                 index += 2
             } else {
@@ -35,7 +41,14 @@ struct Arguments {
         }
         self.positional = positional
         self.values = values
+        self.positionalIndices = positionalIndices
     }
+
+    private static let booleanOptions: Set<String> = [
+        "activate", "detach", "errors-only", "fail-on-match", "follow", "force",
+        "h", "help", "host-only", "include-physical", "magisk", "no-magisk",
+        "pem", "pinned", "saved", "text",
+    ]
 
     /// The option name behind a token, or nil when the token is a positional value.
     ///
@@ -54,10 +67,11 @@ struct Arguments {
 
     /// Everything after `word` in the original token order — subcommand dispatch.
     func after(_ word: String) -> Arguments {
-        guard let index = tokens.firstIndex(of: word) else {
+        guard let position = positional.firstIndex(of: word) else {
             return Arguments([])
         }
-        return Arguments(Array(tokens[(index + 1)...]))
+        let index = positionalIndices[position]
+        return Arguments(Array(tokens[(index + 1)...]), inheritedValues: values)
     }
 
     func has(_ name: String) -> Bool { values[name] != nil }
@@ -119,16 +133,22 @@ enum Help {
                            [--input PATH|-]; update also needs the rule id positionally.
                            Other tools answer with an `unsupported` envelope.
 
-      proxymaxx-cli scenario list [--rules PATH] [--text]
-      proxymaxx-cli scenario show <name|id>
-      proxymaxx-cli scenario create --name NAME --include RULE[,RULE...]
-      proxymaxx-cli scenario delete <name|id>
-      proxymaxx-cli scenario activate <name|id>
-                           Named sets of Map Local rules. A scenario stores rule ids, so
-                           renaming a rule keeps it in the set; activating is exclusive:
-                           the scenario's rules turn on and every other rule turns off,
-                           giving one reproducible setup for a test run. --include takes
-                           rule names, URLs or ids, comma separated.
+      proxymaxx-cli bundle import ZIP [--activate] [--rules PATH]
+      proxymaxx-cli bundle list [--text] [--rules PATH]
+      proxymaxx-cli bundle show <name|id|slug> [--rules PATH]
+      proxymaxx-cli bundle activate <name|id|slug> [--rules PATH]
+      proxymaxx-cli bundle deactivate <name|id|slug> [--rules PATH]
+      proxymaxx-cli bundle remove <name|id|slug> [--rules PATH]
+      proxymaxx-cli bundle export [<name|id|slug>] --output ZIP [--rules PATH]
+                                 [--include RULE[,RULE...]] [--name NAME]
+                           Portable ZIPs contain rules and their response files or directories.
+                           Import defaults off; --activate enables the imported rules and
+                           disables every other rule. Deactivate disables only bundle members;
+                           remove deletes their rules and managed response files.
+                           Export without a selector includes all current rules; --include
+                           selects names, URLs or ids. Fresh exports use --name or the output
+                           basename and do not create a local bundle. Existing ZIPs are never
+                           overwritten. List emits NDJSON; show emits a JSON object.
 
       proxymaxx-cli rule list      [--rules PATH] [--text]
       proxymaxx-cli rule add       --url PATTERN --file PATH [--method M] [--name NAME]
@@ -162,10 +182,9 @@ enum Help {
 
       proxymaxx-cli paths
 
-    All rule commands read and write the same JSON file the app uses, so settings made
-    here and in the app stay in step. When the GUI app is currently serving, edits are
-    delivered to the app over a request file instead of the file itself, so they apply
-    live in the running engine; `serve` watches the rule file, so edits apply without a
+    Default rule commands use the app's live state over IPC while the GUI owns the proxy;
+    otherwise they read and write its JSON rule file. Explicit --rules PATH always targets
+    that file, never the GUI. `serve` watches its rule file and applies edits without a
     restart. Short options (-o, -i, -m) are accepted alongside the long ones.
     """
 }

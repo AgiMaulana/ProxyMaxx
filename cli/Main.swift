@@ -35,8 +35,8 @@ struct ProxyMaxxCLI {
                 try await RuleCommand.run(arguments.after(command))
             case "rules":
                 try await RulesCommand.run(arguments.after(command))
-            case "scenario":
-                try await ScenarioCommand.run(arguments.after(command))
+            case "bundle":
+                try await BundleCommand.run(arguments.after(command))
             case "cert":
                 try await CertCommand.run(arguments.after(command))
             case "android":
@@ -72,7 +72,7 @@ struct ProxyMaxxCLI {
         } catch let error as CLIError {
             fail(error.message)
         } catch {
-            fail("\(error)")
+            fail(error.localizedDescription)
         }
     }
 

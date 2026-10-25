@@ -28,7 +28,7 @@ enum RuleCommand {
         let body = arguments.after(action)
         switch action {
         case "list":
-            try list(body)
+            try await list(body)
         case "add":
             try await add(body)
         case "remove":
@@ -55,9 +55,48 @@ enum RuleCommand {
         ProxyRegistry.read()?.owner == .app
     }
 
-    /// Ship one request to the GUI app and wait for its answer. The wire payload is the
-    /// same model the file stores, so both transports produce identical state; `Result`
-    /// carries the reply for reads (`listScenarios`) as well as writes.
+    static func appOwned(for arguments: Arguments) -> Bool {
+        !arguments.has("rules") && appOwned()
+    }
+
+    static func loadRulesFile(_ url: URL) throws -> RuleFile {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return RuleFile()
+        } catch {
+            throw CLIError("cannot read rules file at \(url.path): \(error.localizedDescription)")
+        }
+        do {
+            return try JSONDecoder().decode(RuleFile.self, from: data)
+        } catch {
+            throw CLIError("invalid rules file at \(url.path): \(error.localizedDescription)")
+        }
+    }
+
+    static func mapLocalSnapshot(_ arguments: Arguments) async throws -> RuleFile {
+        guard appOwned(for: arguments) else {
+            return try loadRulesFile(resolveRulesFile(arguments))
+        }
+        guard let result = try await deliver(.listBundles),
+              let bundles = result.bundles, let rules = result.rules else {
+            throw CLIError("the GUI app did not return its live Map Local rules and bundles")
+        }
+        return RuleFile(
+            isMapLocalEnabled: result.isMapLocalEnabled ?? true,
+            mapLocalRules: rules, mapLocalBundles: bundles
+        )
+    }
+
+    static func pruneBundleMembership(in file: inout RuleFile) {
+        let existing = Set(file.mapLocalRules.map(\.id))
+        for index in file.mapLocalBundles.indices {
+            file.mapLocalBundles[index].ruleIDs.removeAll { !existing.contains($0) }
+        }
+    }
+
+    /// Send one request to the GUI owner and return its live-state reply.
     static func deliver(
         _ op: CommandIPC.Operation,
         rule: MapLocalRule? = nil,
@@ -68,7 +107,9 @@ enum RuleCommand {
         list: String? = nil,
         pattern: String? = nil,
         add: Bool? = nil,
-        scenario: MapLocalScenario? = nil
+        archivePath: String? = nil,
+        bundleName: String? = nil,
+        ruleIDs: [UUID]? = nil
     ) async throws -> CommandIPC.Result? {
         let message = CommandIPC.Message(
             op: op,
@@ -82,7 +123,9 @@ enum RuleCommand {
             list: list,
             pattern: pattern,
             add: add,
-            scenario: scenario
+            archivePath: archivePath,
+            bundleName: bundleName,
+            ruleIDs: ruleIDs
         )
         guard let result = CommandIPC.request(message, timeout: 8) else {
             throw CLIError("the GUI app owns the proxy but did not respond within 8s — is it still open? (check: proxymaxx-cli status)")
@@ -96,11 +139,8 @@ enum RuleCommand {
     // MARK: - list
 
     /// NDJSON rule objects by default; `--text` gives a human one-line-per-rule summary.
-    ///
-    /// Reads the file even when the app owns the engine: the app autosaves every change
-    /// within its debounce window, so the file is as live as the engine.
-    private static func list(_ arguments: Arguments) throws {
-        let file = RuleFile.load(from: resolveRulesFile(arguments))
+    private static func list(_ arguments: Arguments) async throws {
+        let file = try await mapLocalSnapshot(arguments)
         if arguments.has("text") {
             if file.mapLocalRules.isEmpty { note("no map local rules in \(resolveRulesFile(arguments).path)") }
             for rule in file.mapLocalRules {
@@ -159,13 +199,13 @@ enum RuleCommand {
         )
         if rule.name.isEmpty { rule.name = "cli \(pattern)" }
 
-        if appOwned() {
+        if appOwned(for: arguments) {
             let result = try await deliver(.add, rule: rule)
             try emitRule(result?.rule ?? rule)
             return
         }
 
-        var file = RuleFile.load(from: rulesFile)
+        var file = try loadRulesFile(rulesFile)
         file.mapLocalRules.append(rule)
         try file.write(to: rulesFile)
         note("added rule \(rule.id.uuidString) → \(expanded)")
@@ -184,7 +224,7 @@ enum RuleCommand {
         guard let target = target(from: arguments) else {
             throw CLIError("rule remove needs --id, --name or --url", hint: "run `proxymaxx-cli rule list` to find one")
         }
-        if appOwned() {
+        if appOwned(for: arguments) {
             _ = try await deliver(.remove, target: target)
             return
         }
@@ -196,6 +236,7 @@ enum RuleCommand {
             file.mapLocalRules = file.mapLocalRules.enumerated()
                 .filter { !matched.contains($0.offset) }
                 .map { $0.element }
+            pruneBundleMembership(in: &file)
             note("removed \(matched.count) rule\(matched.count == 1 ? "" : "s")")
         }
     }
@@ -204,7 +245,7 @@ enum RuleCommand {
         guard let target = target(from: arguments) else {
             throw CLIError("\(enabled ? "enabling" : "disabling") a rule needs --id, --name or --url", hint: "run `proxymaxx-cli rule list` to find one")
         }
-        if appOwned() {
+        if appOwned(for: arguments) {
             _ = try await deliver(enabled ? .enable : .disable, target: target)
             return
         }
@@ -226,7 +267,7 @@ enum RuleCommand {
         guard offset != 0 else {
             throw CLIError("--by must not be 0")
         }
-        if appOwned() {
+        if appOwned(for: arguments) {
             _ = try await deliver(.move, target: Selector(id: id, name: nil, url: nil), by: offset)
             return
         }
@@ -244,18 +285,19 @@ enum RuleCommand {
     }
 
     private static func clear(_ arguments: Arguments) async throws {
-        if appOwned() {
+        if appOwned(for: arguments) {
             _ = try await deliver(.clear)
             return
         }
         let rulesFile = resolveRulesFile(arguments)
-        var file = RuleFile.load(from: rulesFile)
+        var file = try loadRulesFile(rulesFile)
         let count = file.mapLocalRules.count
         guard count > 0 else {
             note("nothing to clear — no map local rules in \(rulesFile.path)")
             return
         }
         file.mapLocalRules.removeAll()
+        pruneBundleMembership(in: &file)
         try file.write(to: rulesFile)
         note("cleared \(count) rule\(count == 1 ? "" : "s")")
     }
@@ -264,7 +306,7 @@ enum RuleCommand {
 
     /// Read, mutate and rewrite the rule file, preserving switches and policy untouched.
     static func mutate(_ rulesFile: URL, _ change: (inout RuleFile) async throws -> Void) async throws {
-        var file = RuleFile.load(from: rulesFile)
+        var file = try loadRulesFile(rulesFile)
         try await change(&file)
         try file.write(to: rulesFile)
     }

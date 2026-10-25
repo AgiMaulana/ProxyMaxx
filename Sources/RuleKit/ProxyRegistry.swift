@@ -137,8 +137,9 @@ public enum CommandIPC {
         public let pattern: String?
         /// `setSSLProxying`: true adds the pattern, false removes it.
         public let add: Bool?
-        /// `addScenario`: the complete scenario to save.
-        public let scenario: MapLocalScenario?
+        public let archivePath: String?
+        public let bundleName: String?
+        public let ruleIDs: [UUID]?
         public let createdAt: Date
 
         public init(
@@ -153,7 +154,9 @@ public enum CommandIPC {
             list: String? = nil,
             pattern: String? = nil,
             add: Bool? = nil,
-            scenario: MapLocalScenario? = nil
+            archivePath: String? = nil,
+            bundleName: String? = nil,
+            ruleIDs: [UUID]? = nil
         ) {
             self.id = UUID().uuidString
             self.op = op
@@ -167,7 +170,9 @@ public enum CommandIPC {
             self.list = list
             self.pattern = pattern
             self.add = add
-            self.scenario = scenario
+            self.archivePath = archivePath
+            self.bundleName = bundleName
+            self.ruleIDs = ruleIDs
             self.createdAt = Date()
         }
     }
@@ -177,12 +182,11 @@ public enum CommandIPC {
         public let ok: Bool
         public let error: String?
         public let rule: MapLocalRule?
-        /// `activateScenario`: how many existing rules the scenario enabled.
         public let applied: Int?
-        /// `listScenarios`: the app's live scenarios and rules, so a read never waits for
-        /// the app's debounced autosave to reach the rule file.
-        public let scenarios: [MapLocalScenario]?
+        public let bundles: [MapLocalBundle]?
+        public let bundle: MapLocalBundle?
         public let rules: [MapLocalRule]?
+        public let isMapLocalEnabled: Bool?
 
         public init(
             id: String,
@@ -190,16 +194,20 @@ public enum CommandIPC {
             error: String? = nil,
             rule: MapLocalRule? = nil,
             applied: Int? = nil,
-            scenarios: [MapLocalScenario]? = nil,
-            rules: [MapLocalRule]? = nil
+            bundles: [MapLocalBundle]? = nil,
+            bundle: MapLocalBundle? = nil,
+            rules: [MapLocalRule]? = nil,
+            isMapLocalEnabled: Bool? = nil
         ) {
             self.id = id
             self.ok = ok
             self.error = error
             self.rule = rule
             self.applied = applied
-            self.scenarios = scenarios
+            self.bundles = bundles
+            self.bundle = bundle
             self.rules = rules
+            self.isMapLocalEnabled = isMapLocalEnabled
         }
     }
 
@@ -219,14 +227,12 @@ public enum CommandIPC {
         case setSSLProxying
         /// Empty the app's current session. Only meaningful while the app owns the engine.
         case clearSession
-        /// Save or replace a named Map Local scenario, carried in `scenario`.
-        case addScenario
-        /// Delete a scenario, selected by id or name.
-        case removeScenario
-        /// Turn on exactly one scenario's rules, selected by id or name.
-        case activateScenario
-        /// Read the live scenarios and rules without touching the rule file.
-        case listScenarios
+        case importBundle
+        case exportBundle
+        case activateBundle
+        case deactivateBundle
+        case removeBundle
+        case listBundles
     }
 
     static func directory(_ directory: URL?) -> URL {

@@ -1038,40 +1038,55 @@ final class AppModel: ObservableObject {
         case .clearSession:
             flowStore.clear()
             return CommandIPC.Result(id: message.id, ok: true)
-        case .addScenario:
-            guard let scenario = message.scenario, !scenario.name.trimmingCharacters(in: .whitespaces).isEmpty else {
-                return fail("the request carried no named scenario")
+        case .importBundle, .exportBundle, .activateBundle, .deactivateBundle, .removeBundle:
+            do {
+                switch message.op {
+                case .importBundle:
+                    guard let path = message.archivePath else { return fail("bundle import needs a ZIP path") }
+                    let bundle = try ruleStore.importMapLocalBundle(
+                        from: URL(fileURLWithPath: path), activate: message.enabled ?? false
+                    )
+                    return CommandIPC.Result(id: message.id, ok: true, bundle: bundle)
+                case .exportBundle:
+                    guard let path = message.archivePath else { return fail("bundle export needs an output ZIP path") }
+                    let output = URL(fileURLWithPath: path)
+                    if message.targetID != nil || message.targetName != nil {
+                        let bundle = try matchingBundle(message)
+                        try ruleStore.exportMapLocalBundle(id: bundle.id, to: output)
+                    } else {
+                        guard let name = message.bundleName else { return fail("bundle export needs a name") }
+                        try ruleStore.exportMapLocalRules(ids: message.ruleIDs.map(Set.init), name: name, to: output)
+                    }
+                    return CommandIPC.Result(id: message.id, ok: true)
+                case .activateBundle:
+                    let bundle = try matchingBundle(message)
+                    let applied = try ruleStore.activateMapLocalBundle(id: bundle.id)
+                    return CommandIPC.Result(id: message.id, ok: true, applied: applied)
+                case .deactivateBundle:
+                    let bundle = try matchingBundle(message)
+                    let applied = try ruleStore.deactivateMapLocalBundle(id: bundle.id)
+                    return CommandIPC.Result(id: message.id, ok: true, applied: applied)
+                case .removeBundle:
+                    let bundle = try matchingBundle(message)
+                    try ruleStore.removeMapLocalBundle(id: bundle.id)
+                    return CommandIPC.Result(id: message.id, ok: true)
+                default:
+                    return fail("unsupported bundle operation")
+                }
+            } catch {
+                return fail(error.localizedDescription)
             }
-            ruleStore.saveMapLocalScenario(scenario)
-            return CommandIPC.Result(id: message.id, ok: true)
-        case .removeScenario:
-            guard let scenario = matchingScenario(message) else { return fail("no scenario matches the selector") }
-            ruleStore.removeMapLocalScenario(id: scenario.id)
-            return CommandIPC.Result(id: message.id, ok: true)
-        case .activateScenario:
-            guard let scenario = matchingScenario(message) else { return fail("no scenario matches the selector") }
-            let applied = ruleStore.activateMapLocalScenario(id: scenario.id)
-            return CommandIPC.Result(id: message.id, ok: true, applied: applied)
-        case .listScenarios:
+        case .listBundles:
             return CommandIPC.Result(
-                id: message.id,
-                ok: true,
-                scenarios: ruleStore.mapLocalScenarios,
-                rules: ruleStore.mapLocalRules
+                id: message.id, ok: true,
+                bundles: ruleStore.mapLocalBundles, rules: ruleStore.mapLocalRules,
+                isMapLocalEnabled: ruleStore.isMapLocalEnabled
             )
         }
     }
 
-    /// A scenario picked by id, then name, both case-insensitive — the CLI's selector order.
-    private func matchingScenario(_ message: CommandIPC.Message) -> MapLocalScenario? {
-        if let targetID = message.targetID, let id = UUID(uuidString: targetID),
-           let scenario = ruleStore.mapLocalScenarios.first(where: { $0.id == id }) {
-            return scenario
-        }
-        if let name = message.targetName {
-            return ruleStore.mapLocalScenarios.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
-        }
-        return nil
+    private func matchingBundle(_ message: CommandIPC.Message) throws -> MapLocalBundle {
+        try MapLocalBundleState.resolve(message.targetID ?? message.targetName ?? "", in: ruleStore.currentRuleFile())
     }
 
     /// Poll the ownership file while this window is idle so the user sees CLI serve
