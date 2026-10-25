@@ -3,7 +3,7 @@
 # Builds ProxyMaxx, builds the companions it ships, and wraps the result in a runnable
 # .app bundle.
 #
-# Usage: Scripts/bundle-app.sh [debug|release] [--with-android-vpn]
+# Usage: Scripts/bundle-app.sh [debug|release] [--with-android-vpn] [--firefox-xpi PATH]
 #
 # The CLI and the browser extension always come from this checkout. The Android tunnel
 # needs a JDK and the Android SDK, so it is built only when asked for — but a release
@@ -14,12 +14,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIGURATION="debug"
 BUILD_ANDROID_VPN=0
+FIREFOX_XPI=""
 
-for argument in "$@"; do
-    case "$argument" in
-        debug|release)       CONFIGURATION="$argument" ;;
-        --with-android-vpn)  BUILD_ANDROID_VPN=1 ;;
-        *) echo "Usage: $0 [debug|release] [--with-android-vpn]" >&2; exit 2 ;;
+while (( $# > 0 )); do
+    case "$1" in
+        debug|release)       CONFIGURATION="$1"; shift ;;
+        --with-android-vpn)  BUILD_ANDROID_VPN=1; shift ;;
+        --firefox-xpi)
+            if (( $# < 2 )) || [[ -z "$2" || "$2" == --* ]]; then
+                echo "Usage: $0 [debug|release] [--with-android-vpn] [--firefox-xpi PATH]" >&2
+                exit 2
+            fi
+            FIREFOX_XPI="$2"
+            [[ "$FIREFOX_XPI" == /* ]] || FIREFOX_XPI="$PWD/$FIREFOX_XPI"
+            shift 2
+            ;;
+        *) echo "Usage: $0 [debug|release] [--with-android-vpn] [--firefox-xpi PATH]" >&2; exit 2 ;;
     esac
 done
 
@@ -34,7 +44,11 @@ BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 # would otherwise ship silently, and neither shows up as a compile error.
 echo "==> Building companions"
 "$ROOT/Scripts/build-cli.sh" "$CONFIGURATION"
-"$ROOT/Scripts/build-browser-extension.sh"
+if [[ -n "$FIREFOX_XPI" ]]; then
+    "$ROOT/Scripts/build-browser-extension.sh" --firefox-xpi "$FIREFOX_XPI"
+else
+    "$ROOT/Scripts/build-browser-extension.sh"
+fi
 if [[ "$BUILD_ANDROID_VPN" == 1 ]]; then
     "$ROOT/Scripts/build-android-vpn.sh" "$CONFIGURATION"
 fi
@@ -78,8 +92,8 @@ if [[ ! -f "$APP/Contents/Resources/Android/proxymaxx-vpn.apk" ]]; then
 fi
 
 # The browser companion is two halves. The native messaging host must sit beside the app
-# binary, because that is the path the host manifests point at. The unpacked extension
-# travels in Resources so the app can reveal it for the browser's "Load unpacked".
+# binary, because that is the path the host manifests point at. Chromium's unpacked
+# extension and Firefox's XPI travel in Resources so the app can reveal them for installation.
 echo "==> Copying browser companion"
 if [[ -f "$BIN_PATH/proxymaxx-browser-host" ]]; then
     cp "$BIN_PATH/proxymaxx-browser-host" "$APP/Contents/MacOS/proxymaxx-browser-host"
@@ -89,8 +103,9 @@ else
 fi
 rm -rf "$APP/Contents/Resources/Browser"
 mkdir -p "$APP/Contents/Resources/Browser"
-if [[ ! -d "$ROOT/Resources/browser/proxymaxx-extension" ]]; then
-    echo "❌ build-browser-extension.sh left nothing to bundle." >&2
+if [[ ! -f "$ROOT/Resources/browser/proxymaxx-extension/manifest.json" ||
+      ! -f "$ROOT/Resources/browser/proxymaxx-firefox-extension.xpi" ]]; then
+    echo "build-browser-extension.sh left a missing Chromium extension or Firefox XPI." >&2
     exit 1
 fi
 cp -R "$ROOT/Resources/browser/." "$APP/Contents/Resources/Browser/"
@@ -130,6 +145,7 @@ check_signature() {
 check_present "Contents/MacOS/ProxyMaxx"
 check_present "Contents/Resources/proxymaxx-cli"
 check_present "Contents/Resources/Browser/proxymaxx-extension/manifest.json"
+check_present "Contents/Resources/Browser/proxymaxx-firefox-extension.xpi"
 check_present "Contents/Resources/Android/install_certificate_android_emulator.sh"
 check_present "Contents/Resources/AppIcon.icns"
 check_present "Contents/Resources/en.lproj/Localizable.strings"

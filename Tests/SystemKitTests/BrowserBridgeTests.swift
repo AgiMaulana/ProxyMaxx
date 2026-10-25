@@ -81,26 +81,47 @@ final class BrowserBridgeTests: XCTestCase {
 
     func testInstallWritesTheManifestEachBrowserCanAuthorise() throws {
         let host = try executableHost()
-        let chrome = BrowserBridge.Browser(
-            name: "Chrome",
-            directory: root.appendingPathComponent("Chrome/NativeMessagingHosts", isDirectory: true)
+        for profile in ["Google/Chrome", "Firefox"] {
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent(profile, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        let browsers = BrowserBridge.detectedBrowsers(applicationSupport: root)
+
+        let written = try BrowserBridge.installNativeMessagingHost(hostBinary: host, browsers: browsers)
+
+        XCTAssertEqual(written.map(\.browser), ["Chrome", "Firefox"])
+        XCTAssertEqual(written.map(\.manifest), [
+            root.appendingPathComponent("Google/Chrome/NativeMessagingHosts/com.proxymaxx.browser.json"),
+            root.appendingPathComponent("Mozilla/NativeMessagingHosts/com.proxymaxx.browser.json"),
+        ])
+        for installed in written {
+            let data = try Data(contentsOf: installed.manifest)
+            let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(manifest["name"] as? String, BrowserBridge.hostName)
+            XCTAssertEqual(manifest["path"] as? String, host.path)
+            XCTAssertEqual(manifest["type"] as? String, "stdio")
+            if installed.browser == "Firefox" {
+                XCTAssertEqual(manifest["allowed_extensions"] as? [String], [BrowserBridge.firefoxExtensionID])
+                XCTAssertNil(manifest["allowed_origins"])
+            } else {
+                XCTAssertEqual(
+                    manifest["allowed_origins"] as? [String],
+                    ["chrome-extension://\(BrowserBridge.extensionID)/"]
+                )
+                XCTAssertNil(manifest["allowed_extensions"])
+            }
+        }
+    }
+
+    func testMozillaHostDirectoryAloneDoesNotCountAsAFirefoxProfile() throws {
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Mozilla/NativeMessagingHosts", isDirectory: true),
+            withIntermediateDirectories: true
         )
 
-        let written = try BrowserBridge.installNativeMessagingHost(hostBinary: host, browsers: [chrome])
-
-        XCTAssertEqual(written.map(\.browser), ["Chrome"])
-        let data = try Data(contentsOf: written[0].manifest)
-        let manifest = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: data) as? [String: Any]
-        )
-        XCTAssertEqual(manifest["name"] as? String, BrowserBridge.hostName)
-        XCTAssertEqual(manifest["path"] as? String, host.path)
-        XCTAssertEqual(manifest["type"] as? String, "stdio")
-        // The one entry that makes the extension's origin allowed to talk to the host.
-        XCTAssertEqual(
-            manifest["allowed_origins"] as? [String],
-            ["chrome-extension://\(BrowserBridge.extensionID)/"]
-        )
+        XCTAssertTrue(BrowserBridge.detectedBrowsers(applicationSupport: root).isEmpty)
     }
 
     func testInstallNamesEveryBrowserItReached() throws {
