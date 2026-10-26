@@ -79,9 +79,12 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
     /// keep-alive client can have more than one delayed response in flight.
     private var pendingWrites: [PendingLocalWrite] = []
 
-    init(engine: ProxyEngine, tunnel: (host: String, port: Int)?) {
+    private let clientApp: ClientApp?
+
+    init(engine: ProxyEngine, tunnel: (host: String, port: Int)?, clientApp: ClientApp?) {
         self.engine = engine
         self.tunnel = tunnel
+        self.clientApp = clientApp
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -233,6 +236,7 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
                 request: request,
                 timing: timing,
                 isIntercepted: resolved.isIntercepted,
+                clientApp: clientApp,
                 clientAddress: Self.clientAddress(channel)
             ),
             onEmit: { flow in engine.emitFlow(flow) }

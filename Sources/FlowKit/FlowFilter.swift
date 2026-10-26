@@ -11,6 +11,7 @@ public enum SidebarSelection: Hashable, Equatable, Sendable, Codable {
     case pinned
     case saved
     case app(String)
+    case client(String)
     case domain(String)
 }
 
@@ -51,8 +52,14 @@ public struct FlowFilter: Equatable, Sendable, Codable {
             if !flow.isPinned { return false }
         case .saved:
             if flow.response == nil && flow.error == nil { return false }
-        case .app(let appName):
-            if flow.clientApp != appName { return false }
+        case .app(let client):
+            guard let app = flow.clientApp else { return false }
+            if app.id != client, app.bundleIdentifier != client, app.path != client,
+               app.name.caseInsensitiveCompare(client) != .orderedSame {
+                return false
+            }
+        case .client(let id):
+            if flow.clientApp?.id != id { return false }
         case .domain(let hostName):
             if flow.host.caseInsensitiveCompare(hostName) != .orderedSame { return false }
         }

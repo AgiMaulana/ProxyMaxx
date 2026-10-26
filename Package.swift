@@ -28,7 +28,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.7"),
         .package(url: "https://github.com/f-meloni/SwiftBrotli.git", from: "0.1.0"),
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
+        .package(url: "https://github.com/AgiMaulana/ZIPFoundation.git", exact: "0.9.21"),
     ],
     targets: [
         /// Product identity shared by every component that writes user data.
@@ -76,9 +76,12 @@ let package = Package(
         .target(name: "SystemKit", dependencies: ["Branding"]),
         .target(name: "CodeGenKit", dependencies: ["FlowKit"]),
 
+        // Local process attribution shared by the app and CLI.
+        .target(name: "ClientKit", dependencies: ["FlowKit"]),
+
         .executableTarget(
             name: "ProxyMaxxApp",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "Branding"]
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding"]
         ),
 
         // The companion CLI (`proxymaxx-cli`), a headless driver for AI agents. It lives
@@ -86,7 +89,7 @@ let package = Package(
         // reuses ProxyKit/CertKit/RuleKit/FlowKit instead of duplicating any of them.
         .executableTarget(
             name: "ProxyMaxxCLI",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "Branding"],
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "ClientKit", "Branding"],
             path: "cli",
             exclude: ["README.md"]
         ),
@@ -102,7 +105,7 @@ let package = Package(
         .testTarget(
             name: "ProxyKitTests",
             dependencies: [
-                "ProxyKit", "CertKit", "FlowKit", "RuleKit",
+                "ProxyKit", "CertKit", "FlowKit", "RuleKit", "ClientKit",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -119,6 +122,14 @@ let package = Package(
         .testTarget(
             name: "RuleKitTests",
             dependencies: ["RuleKit", .product(name: "ZIPFoundation", package: "ZIPFoundation")]
+        ),
+        .testTarget(
+            name: "ClientKitTests",
+            dependencies: [
+                "ClientKit", "FlowKit",
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+            ]
         ),
         .testTarget(name: "CodeGenKitTests", dependencies: ["CodeGenKit", "FlowKit"]),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),

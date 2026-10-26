@@ -68,7 +68,7 @@ enum FlowFormat {
             requestBytes: flow.requestBytes,
             responseBytes: flow.responseBytes,
             contentType: flow.response?.contentType?.essence,
-            clientApp: flow.clientApp,
+            clientApp: flow.clientApp?.name,
             request: nil,
             response: nil,
             webSocketMessages: nil

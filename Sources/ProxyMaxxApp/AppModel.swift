@@ -8,6 +8,7 @@ import ProxyKit
 import CertKit
 import RuleKit
 import SystemKit
+import ClientKit
 
 /// Coordinates the proxy engine, the flow store, the rule store and the system-level
 /// integrations. Everything the UI observes lives here.
@@ -241,6 +242,7 @@ final class AppModel: ObservableObject {
                 configuration: ProxyConfiguration(host: "127.0.0.1", port: port, socksPort: socksPort),
                 authority: authority
             )
+            engine.clientResolver = ClientAppResolver()
             engine.sslProxyingPolicy = ruleStore.effectivePolicy
             engine.mapLocalRules = ruleStore.effectiveMapLocalRules
             engine.onEvent = { [weak self] event in

@@ -24,6 +24,8 @@ Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in thi
   domain, so trusting the certificate needs no administrator password.
 - **Works with phones, emulators and browsers.** One-click Android emulator and device
   setup, a bundled SOCKS5 listener, and a Chromium extension that survives policy overrides.
+- **Knows which app sent each request.** Every accepted connection is matched to the macOS
+  process that owns it, so the sidebar groups traffic by app and each flow names its origin.
 - **Scriptable.** `proxymaxx-cli` drives the same engine and rules from a shell or an AI
   agent.
 
@@ -95,12 +97,42 @@ There is no Mac App Store build.
 
 ### Traffic inspection
 
-- Live traffic table (method, status, host, path, size, duration, client) with text, method
+- Live traffic table (method, status, host, app, path, size, duration) with text, method
   and error filtering.
-- Flow inspector: request and response headers, pretty, raw and hex bodies, JSON and form
-  formatting, image preview, timings, decryption state.
+- Sidebar grouping by app, with the app icon and a flow count per app, alongside All,
+  Pinned, Saved and Domain.
+- Flow inspector: the originating app with its bundle identifier and pid, request and
+  response headers, pretty, raw and hex bodies, JSON and form formatting, image preview,
+  timings, decryption state.
 - **Copy as cURL** for any request, from the inspector or the table's context menu.
 - SSL Proxying list with include and exclude wildcards.
+
+### Client attribution
+
+Each accepted connection is matched to the local process on the other end, so the table, the
+sidebar and the inspector all name the app that made the request.
+
+- The proxy asks libproc for every process's open sockets and looks for the one whose local
+  endpoint is the client side of this connection and whose remote endpoint is the proxy. The
+  lookup runs once per connection, off the NIO event loop, before the first byte is read.
+- A helper process is folded into the app that contains it
+  (`Browser Helper.app` reports as `Browser`), and the flow records the bundle identifier,
+  the bundle path and the pid. An unbundled process such as `curl` is reported by executable
+  name and path.
+- Grouping uses the bundle identifier, falling back to the executable path and then the
+  name, so an app keeps one group across restarts without merging two unrelated processes
+  that happen to share a name.
+- Icons come from the bundle and are cached; a process outside a bundle gets a generic icon.
+- When no single owner answers, the flow still carries the client's socket address and
+  shows **Unknown** instead of guessing. This happens for inherited or shared sockets, and
+  for processes macOS will not describe to the app.
+
+The CLI host runs the same resolver, so a session captured with `proxymaxx-cli serve` groups
+identically and `flows --app` matches by the same identity.
+
+![The sidebar grouped by app: curl and Xcode, each with its icon and flow count, while the traffic table's Client column names the app behind every row](docs/screenshots/mac-app-sidebar-grouped-by-app.png)
+
+![The Xcode app selected in the sidebar, narrowing the table to its four flows, with the inspector's Client section showing the bundle identifier, pid and bundle path](docs/screenshots/mac-app-inspector-client-app.png)
 
 ### WebSocket debugging
 
@@ -200,7 +232,8 @@ Compose, Diff, GraphQL/Protobuf, HTTP/2, HAR import/export, MCP server.
    curl --proxy http://127.0.0.1:9090 --cacert <exported-ca>.crt https://example.com/
    ```
 
-4. Traffic appears in the table; select a row to inspect it.
+4. Traffic appears in the table; choose an app in the sidebar to narrow to that process, then
+   select a row to inspect it.
 5. Add hosts to **SSL Proxying → Exclude** to leave their TLS untouched.
 6. Open **Local Override** (Cmd+L) to answer matched URLs from a local file or directory.
    Add a rule, set its URL and matching style, then pick the file or directory under
@@ -364,6 +397,7 @@ sudo networksetup -setsecurewebproxystate "Wi-Fi" off
 ```
 Sources/
   FlowKit       Flow and HTTP models, MIME parsing, body formatting, FlowStore
+  ClientKit     Per-connection process attribution, app identity and icon lookup
   CertKit       Root CA and per-host leaf generation, caching, on-disk storage
   RuleKit       Wildcard matching, MatchingRule, SSLProxyingPolicy, Map Local rules, RuleStore
   ProxyKit      NIO proxy engine: CONNECT, TLS MITM, opaque relay, flow recording
@@ -379,6 +413,7 @@ Tests/
   CertKitTests      certificate chain validated with SecTrust
   CodeGenKitTests   cURL generation
   FlowKitTests      flow models and formatting
+  ClientKitTests    socket ownership matching and app identity
   RuleKitTests      matching rules, Map Local resolution, registry and IPC, session log
   ProxyKitTests     end-to-end MITM, opaque tunnel, plain HTTP, Map Local and WebSocket via curl
   SystemKitTests    the Android installer, browser bridge and CLI companion

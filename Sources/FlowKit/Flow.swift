@@ -18,8 +18,8 @@ public struct Flow: Identifiable, Codable, Sendable {
     public var timing: FlowTiming
     /// True when the connection was TLS-terminated and decrypted by the proxy.
     public var isIntercepted: Bool
-    /// Bundle name of the client that issued the request, when resolvable.
-    public var clientApp: String?
+    /// Local socket owner, when macOS permits process attribution.
+    public var clientApp: ClientApp?
     /// `ip:port` of the originating socket, when known.
     public var clientAddress: String?
     public var source: FlowSource
@@ -42,7 +42,7 @@ public struct Flow: Identifiable, Codable, Sendable {
         response: HTTPResponse? = nil,
         timing: FlowTiming = FlowTiming(),
         isIntercepted: Bool = false,
-        clientApp: String? = nil,
+        clientApp: ClientApp? = nil,
         clientAddress: String? = nil,
         source: FlowSource = .local,
         error: String? = nil,

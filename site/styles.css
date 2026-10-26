@@ -75,6 +75,11 @@ h1 { max-width: 690px; margin: 0; font-size: clamp(3rem, 6vw, 5.5rem); line-heig
 .plain-list li::before { content: ""; position: absolute; left: 2px; top: 22px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .local-shot { width: 100%; }
 
+.client-section { padding-block: 126px 0; }
+.client-shot { width: 100%; }
+.client-detail { margin-top: 56px; }
+.client-detail .client-shot { max-width: 1100px; }
+
 .companions-heading { max-width: 780px; }
 .companions-heading > p { max-width: 650px; margin-top: 24px; }
 .companion-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr); gap: 70px; align-items: start; margin-top: 64px; }

@@ -27,6 +27,7 @@
       <button class="menu-button" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button>
       <div class="nav-links" id="nav-links">
         <a href="#features">Features</a>
+        <a href="#client-attribution">Client attribution</a>
         <a href="#local-override">Local Override</a>
         <a href="#companions">Companions</a>
         <a href="#install">Install</a>
@@ -78,6 +79,7 @@
           <div><dt>HTTPS MITM</dt><dd>A local root CA signs per-host certificates for traffic you choose to decrypt.</dd></div>
           <div><dt>WebSockets</dt><dd>Text, binary, and control frames stay attached to the upgrade flow.</dd></div>
           <div><dt>Copy as cURL</dt><dd>Reproduce any captured request from the inspector or table context menu.</dd></div>
+          <div><dt>Client attribution</dt><dd>Name the app behind every connection, with its icon, bundle identifier, and pid.</dd></div>
         </dl>
       </div>
     </section>
@@ -96,6 +98,29 @@
         </div>
         <figure class="window-frame local-shot">
           <img src="assets/screenshots/mac-app-local-override-list.png" alt="Flat Local Override rule list with ZIP import and export controls" width="2200" height="1320" loading="lazy">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section client-section" id="client-attribution">
+      <div class="shell split">
+        <div class="split-copy">
+          <p class="kicker">Client attribution</p>
+          <h2>Know which app sent each request.</h2>
+          <p>Every accepted connection is matched to the local process that owns it, so the sidebar groups traffic by app and the inspector names its bundle identifier, path, and pid.</p>
+          <ul class="plain-list">
+            <li>Helpers fold into the app that contains them</li>
+            <li>One group per app across restarts, without merging unrelated processes</li>
+            <li>Unknown instead of a guess when no single owner answers</li>
+          </ul>
+        </div>
+        <figure class="window-frame client-shot">
+          <img src="assets/screenshots/mac-app-sidebar-grouped-by-app.png" alt="ProxyMaxx sidebar grouped by app, with curl and Xcode icons and flow counts, and the Client column naming the app behind every row" width="2208" height="1336" loading="lazy">
+        </figure>
+      </div>
+      <div class="shell client-detail">
+        <figure class="window-frame client-shot">
+          <img src="assets/screenshots/mac-app-inspector-client-app.png" alt="The Xcode app selected in the sidebar, narrowing the table to its flows, with the inspector's Client section showing its bundle identifier, pid, and bundle path" width="2208" height="1336" loading="lazy">
         </figure>
       </div>
     </section>

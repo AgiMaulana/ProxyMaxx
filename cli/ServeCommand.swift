@@ -4,6 +4,7 @@ import FlowKit
 import RuleKit
 import CertKit
 import SystemKit
+import ClientKit
 
 enum ServeCommand {
     /// Events the CLI main loop reacts to: the proxy's own event, or a stop signal.
@@ -62,6 +63,7 @@ enum ServeCommand {
             configuration: ProxyConfiguration(host: "127.0.0.1", port: port, socksPort: socksPort),
             authority: authority
         )
+        engine.clientResolver = ClientAppResolver()
         apply(ruleFile, to: engine)
 
         // The protocol with the rest of the program: funnel proxy callbacks (arbitrary
