@@ -130,6 +130,10 @@ sidebar and the inspector all name the app that made the request.
 The CLI host runs the same resolver, so a session captured with `proxymaxx-cli serve` groups
 identically and `flows --app` matches by the same identity.
 
+![The sidebar grouped by app: curl and Xcode, each with its icon and flow count, while the traffic table's Client column names the app behind every row](docs/screenshots/mac-app-sidebar-grouped-by-app.png)
+
+![The Xcode app selected in the sidebar, narrowing the table to its four flows, with the inspector's Client section showing the bundle identifier, pid and bundle path](docs/screenshots/mac-app-inspector-client-app.png)
+
 ### WebSocket debugging
 
 After a `101 Switching Protocols` the connection is handed to a raw relay, so long-lived

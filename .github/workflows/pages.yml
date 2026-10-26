@@ -37,6 +37,8 @@ jobs:
           cp docs/cover.png _site/assets/cover.png
           cp docs/screenshots/mac-app-proxy-served-on-the-app.png _site/assets/screenshots/
           cp docs/screenshots/mac-app-local-override-list.png _site/assets/screenshots/
+          cp docs/screenshots/mac-app-sidebar-grouped-by-app.png _site/assets/screenshots/
+          cp docs/screenshots/mac-app-inspector-client-app.png _site/assets/screenshots/
           cp docs/screenshots/mac-app-android-emulator-setup-guide-in-one-click.png _site/assets/screenshots/
 
       - name: Configure Pages
