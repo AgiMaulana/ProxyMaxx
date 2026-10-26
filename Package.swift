@@ -28,7 +28,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.7"),
         .package(url: "https://github.com/f-meloni/SwiftBrotli.git", from: "0.1.0"),
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
+        .package(url: "https://github.com/AgiMaulana/ZIPFoundation.git", exact: "0.9.21"),
     ],
     targets: [
         /// Product identity shared by every component that writes user data.
