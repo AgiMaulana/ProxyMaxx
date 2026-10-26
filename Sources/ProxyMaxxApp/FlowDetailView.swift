@@ -53,6 +53,7 @@ struct FlowDetailView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    clientSection
                     if side == .request { requestSection } else { responseSection }
                 }
                 .padding(12)
@@ -153,6 +154,34 @@ struct FlowDetailView: View {
 
     // MARK: - Sections
 
+    private var clientSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionTitle("common.client")
+            if let app = flow.clientApp {
+                ClientAppLabel(app: app)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                keyValueTable(clientMetadata(for: app))
+            } else {
+                Text("client.unknown")
+                    .font(.callout)
+                Text("client.unavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func clientMetadata(for app: ClientApp) -> [(LocalizedStringKey, String)] {
+        var fields: [(LocalizedStringKey, String)] = []
+        if let bundleIdentifier = app.bundleIdentifier {
+            fields.append(("client.bundleIdentifier", bundleIdentifier))
+        }
+        if let pid = app.pid { fields.append(("client.pid", String(pid))) }
+        if let path = app.path { fields.append(("common.path", path)) }
+        return fields
+    }
+
     private var requestSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle("common.general")
@@ -160,7 +189,6 @@ struct FlowDetailView: View {
                 ("common.method", flow.request.method),
                 ("common.url", flow.request.urlString),
                 ("common.version", flow.request.httpVersion),
-                ("common.client", flow.clientApp ?? "—"),
             ])
             headersSection("inspector.requestHeaders", flow.request.headers)
             bodySection("inspector.requestBody", data: flow.request.body, contentType: flow.request.contentType, encoding: flow.request.contentEncoding)

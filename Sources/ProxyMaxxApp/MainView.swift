@@ -62,6 +62,14 @@ struct MainView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+        .onReceive(flowStore.$revision) { _ in
+            guard flowStore.flows.isEmpty else { return }
+            selection = nil
+            switch filter.sidebarSelection {
+            case .client, .app: filter.sidebarSelection = .all
+            default: break
+            }
+        }
         .onAppear {
             model.refreshExternalOwner()
             model.refreshSystemProxyState()
@@ -72,7 +80,7 @@ struct MainView: View {
     }
 
     private func sidebarView(summary: FlowSummary) -> some View {
-        List {
+        List(selection: sidebarSelection) {
             Section("main.favorites") {
                 sidebarRow(L10n.string("main.all"), systemImage: "tray", selection: .all, count: summary.total)
                 sidebarRow(L10n.string("main.pinned"), systemImage: "pin", selection: .pinned, count: summary.pinned)
@@ -81,8 +89,13 @@ struct MainView: View {
 
             if !summary.apps.isEmpty {
                 Section(header: Text(L10n.format("main.apps", summary.apps.count))) {
-                    ForEach(summary.apps, id: \.self) { app in
-                        sidebarRow(app, systemImage: "app.badge", selection: .app(app), count: summary.appCount(app))
+                    ForEach(summary.apps) { entry in
+                        HStack {
+                            ClientAppLabel(app: entry.app, showsIdentity: summary.duplicateAppNames.contains(entry.app.name))
+                            Spacer()
+                            sidebarCount(entry.count)
+                        }
+                        .tag(SidebarSelection.client(entry.id))
                     }
                 }
             }
@@ -97,60 +110,80 @@ struct MainView: View {
         .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
     }
 
-    private func sidebarRow(_ title: String, systemImage: String, selection: SidebarSelection, count: Int) -> some View {
-        Button {
-            filter.sidebarSelection = selection
-        } label: {
-            HStack {
-                Label(title, systemImage: systemImage)
-                Spacer()
-                Text(verbatim: "\(count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(filter.sidebarSelection == selection ? Color.accentColor.opacity(0.18) : Color.clear)
+    private var sidebarSelection: Binding<SidebarSelection?> {
+        Binding(
+            get: { filter.sidebarSelection },
+            set: { if let selection = $0 { filter.sidebarSelection = selection } }
+        )
     }
 
-    /// One-pass roll-up of the captured flows for the sidebar.
-    ///
-    /// The sidebar needs per-app and per-domain counts plus the sorted key lists.
-    /// Recomputing each count by re-filtering every flow once per row is
-    /// O(flows × domains); folding it all into a single pass keeps the sidebar cheap
-    /// as a session grows toward `FlowStore.maxFlows`.
+    private func sidebarRow(_ title: String, systemImage: String, selection: SidebarSelection, count: Int) -> some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+                .lineLimit(1)
+            Spacer()
+            sidebarCount(count)
+        }
+        .tag(selection)
+    }
+
+    private func sidebarCount(_ count: Int) -> some View {
+        Text(verbatim: "\(count)")
+            .font(.caption)
+            .monospacedDigit()
+            .accessibilityLabel(Text(L10n.format("main.flowCount", count)))
+    }
+
+    private struct AppSummary: Identifiable {
+        let id: String
+        var app: ClientApp
+        var count = 0
+    }
+
+    /// Counts all captured flows in one pass, independent of active filters.
     private struct FlowSummary {
         let total: Int
         let pinned: Int
         let saved: Int
-        let apps: [String]
+        let apps: [AppSummary]
+        let duplicateAppNames: Set<String>
         let domains: [String]
-        private let appCounts: [String: Int]
         private let domainCounts: [String: Int]
 
         init(_ flows: [Flow]) {
             var pinned = 0
             var saved = 0
-            var appCounts: [String: Int] = [:]
+            var apps: [String: AppSummary] = [:]
             var domainCounts: [String: Int] = [:]
             for flow in flows {
                 if flow.isPinned { pinned += 1 }
-                if flow.response != nil { saved += 1 }
-                if let app = flow.clientApp { appCounts[app, default: 0] += 1 }
+                if flow.response != nil || flow.error != nil { saved += 1 }
+                if let app = flow.clientApp {
+                    let id = app.id
+                    apps[id, default: AppSummary(id: id, app: app)].count += 1
+                    if apps[id]?.app.path == nil, app.path != nil {
+                        apps[id]?.app = app
+                    }
+                }
                 domainCounts[flow.host, default: 0] += 1
+            }
+            var names: Set<String> = []
+            var duplicateNames: Set<String> = []
+            for entry in apps.values where !names.insert(entry.app.name).inserted {
+                duplicateNames.insert(entry.app.name)
             }
             self.total = flows.count
             self.pinned = pinned
             self.saved = saved
-            self.appCounts = appCounts
+            self.apps = apps.values.sorted {
+                let order = $0.app.name.localizedStandardCompare($1.app.name)
+                return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+            }
+            self.duplicateAppNames = duplicateNames
             self.domainCounts = domainCounts
-            self.apps = appCounts.keys.sorted()
             self.domains = domainCounts.keys.sorted()
         }
 
-        func appCount(_ app: String) -> Int { appCounts[app] ?? 0 }
         func domainCount(_ domain: String) -> Int { domainCounts[domain] ?? 0 }
     }
 
@@ -240,7 +273,7 @@ struct MainView: View {
             }
             Button { showLog = true } label: { Label("common.log", systemImage: "list.bullet.rectangle") }
             Button { model.clearSession() } label: { Label("common.clear", systemImage: "trash") }
-                .disabled(flows.isEmpty)
+                .disabled(flowStore.flows.isEmpty)
         }
         .labelStyle(.titleAndIcon)
         .padding(.horizontal, 12)
@@ -362,12 +395,31 @@ struct MainView: View {
             .width(64)
 
             TableColumn("common.client") { flow in
-                Text(flow.clientApp ?? "—")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if let app = flow.clientApp {
+                    ClientAppLabel(app: app)
+                        .font(.caption)
+                } else {
+                    Text("client.unknown")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help("client.unavailable")
+                }
             }
-            .width(90)
+            .width(min: 120, ideal: 160, max: 240)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .overlay {
+            if flows.isEmpty {
+                VStack(spacing: 6) {
+                    Text(L10n.string(flowStore.flows.isEmpty ? "main.noCapturedFlows" : "main.noMatchingFlows"))
+                    Text(L10n.string(flowStore.flows.isEmpty ? "main.captureHint" : "main.filterHint"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+            }
+        }
         .contextMenu {
             if let flow = selectedFlow {
                 Button("main.mapResponse") {

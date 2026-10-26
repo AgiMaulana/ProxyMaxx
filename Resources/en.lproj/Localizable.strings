@@ -96,6 +96,16 @@
 "main.noFlowSelected" = "No flow selected";
 "main.err" = "ERR";
 "main.selectFlow" = "Select a flow to inspect it";
+"main.noCapturedFlows" = "No captured flows";
+"main.captureHint" = "Start the proxy and send a request through it.";
+"main.noMatchingFlows" = "No matching flows";
+"main.filterHint" = "Change the filters or choose All in the sidebar.";
+
+/* MARK: Client attribution */
+"client.unknown" = "Unknown";
+"client.unavailable" = "No local app was identified for this connection.";
+"client.bundleIdentifier" = "Bundle ID";
+"client.pid" = "PID";
 
 /* MARK: Flow inspector */
 "inspector.decoded" = "decoded %@";

@@ -85,13 +85,20 @@ is printed from its latest snapshot. The filter flags map one-to-one onto the ap
 | Method | `--method GET|POST|...` |
 | Errors only | `--errors-only` |
 | Domain | `--host api.example.com` |
-| App | `--app com.example.app` |
+| App | `--app com.example.app` (bundle ID, app name or executable path) |
 | Pinned | `--pinned` |
 | Saved | `--saved` |
 
 `--host`, `--app`, `--pinned` and `--saved` all describe one sidebar choice, so at most one
 may be given. `--since` takes a duration or seconds; `--limit` keeps the newest N flows, and
 with `--follow` it stops after N flows.
+
+Both front-ends attribute each connection to the local process that opened it, so every flow
+carries the app that made the request. `clientApp` in the NDJSON line is that app's display
+name. `--app` accepts its bundle identifier, its name or its executable path, and ignores
+case in the name, so `--app com.example.app` and `--app "Example"` select the same flows.
+Flows whose connection had no single owner, because the socket was inherited or macOS would
+not describe the process, have no `clientApp` and are only reachable without `--app`.
 
 `--fail-on-match` prints every selected flow, then exits `4` if at least one matched. No
 matches exit `0`; command and input failures keep their existing exit codes. Combine it with
@@ -312,6 +319,9 @@ mistake a missing feature for a crash. Each answers with an `unsupported` envelo
   never deletes. It works whether or not the CLI is the host, and it survives the engine
   stopping, so a session can be inspected after the fact. Unlike `serve`'s raw stdout, `flows`
   and `flows --follow` collapse the snapshots, so each flow is one line.
+- `clientApp` is the display name of the local process behind a flow, resolved from the socket
+  owner. It is `null` when macOS cannot name a single owner; `--app` then cannot select that
+  flow, and the rest of the line is unaffected.
 - Exit codes: `0` success, `1` error, `2` bad usage, `3` an engine is already running.
 - `serve` starts a fresh session; the previous `session.ndjson` is replaced. Read what you need
   before starting another engine.

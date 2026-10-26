@@ -1,6 +1,7 @@
 import Foundation
 import NIOCore
 import NIOSSL
+import FlowKit
 
 /// Serves SOCKS5 so clients that will not use the system proxy can still be captured.
 ///
@@ -43,6 +44,7 @@ final class SOCKS5Handler: ChannelInboundHandler, RemovableChannelHandler {
     /// and a handler holding the engine strongly would let the loop become its last owner
     /// and tear it down on the loop, where the blocking shutdown traps.
     private weak var engine: ProxyEngine?
+    private let clientApp: ClientApp?
     private var pending: ByteBuffer?
     private var greetingComplete = false
     private var sniffing = false
@@ -50,8 +52,9 @@ final class SOCKS5Handler: ChannelInboundHandler, RemovableChannelHandler {
     private var tunneling = false
     private var target: (host: String, port: Int)?
 
-    init(engine: ProxyEngine) {
+    init(engine: ProxyEngine, clientApp: ClientApp?) {
         self.engine = engine
+        self.clientApp = clientApp
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -251,7 +254,7 @@ final class SOCKS5Handler: ChannelInboundHandler, RemovableChannelHandler {
                         return
                     }
                     do {
-                        let frontend = HTTPForwardHandler(engine: engine, tunnel: target)
+                        let frontend = HTTPForwardHandler(engine: engine, tunnel: target, clientApp: self.clientApp)
                         try channel.pipeline.syncOperations.addHandler(
                             frontend,
                             name: ProxyEngine.HandlerName.frontend

@@ -73,6 +73,23 @@ public final class ProxyEngine: @unchecked Sendable {
         MapLocalResponder.resolve(request: request, rules: mapLocalRules)
     }
 
+    private let resolverLock = NSLock()
+    private var _clientResolver: (any ClientAppResolving)?
+
+    /// Names the process behind each client connection. Without one, flows still carry the
+    /// client's socket address but no app. Safe to set from any thread.
+    public var clientResolver: (any ClientAppResolving)? {
+        get {
+            resolverLock.lock(); defer { resolverLock.unlock() }
+            return _clientResolver
+        }
+        set {
+            resolverLock.lock()
+            _clientResolver = newValue
+            resolverLock.unlock()
+        }
+    }
+
     public private(set) var configuration: ProxyConfiguration
     /// Receives flow and lifecycle events. Called from arbitrary threads.
     public var onEvent: ((ProxyEvent) -> Void)?
@@ -191,7 +208,11 @@ public final class ProxyEngine: @unchecked Sendable {
                 guard let self else {
                     return channel.eventLoop.makeFailedFuture(ProxyKitError.tlsSetup("engine deallocated"))
                 }
-                return channel.pipeline.addHandler(SOCKS5Handler(engine: self), name: HandlerName.socks)
+                return self.resolveClientApp(for: channel).flatMap { clientApp in
+                    channel.pipeline.addHandler(
+                        SOCKS5Handler(engine: self, clientApp: clientApp), name: HandlerName.socks
+                    )
+                }
             }
 
         let channel: Channel
@@ -229,13 +250,37 @@ public final class ProxyEngine: @unchecked Sendable {
 
     // MARK: - Pipeline
 
+    private func resolveClientApp(for channel: Channel) -> EventLoopFuture<ClientApp?> {
+        guard let resolver = clientResolver,
+              let client = channel.remoteAddress, let proxy = channel.localAddress,
+              let clientAddress = Self.numericAddress(client), let clientPort = client.port,
+              let proxyAddress = Self.numericAddress(proxy), let proxyPort = proxy.port
+        else { return channel.eventLoop.makeSucceededFuture(nil) }
+
+        let promise = channel.eventLoop.makePromise(of: ClientApp?.self)
+        resolver.resolveClientApp(
+            clientAddress: clientAddress, clientPort: clientPort,
+            proxyAddress: proxyAddress, proxyPort: proxyPort
+        ) { promise.succeed($0) }
+        return promise.futureResult
+    }
+
+    private static func numericAddress(_ address: SocketAddress) -> String? {
+        guard let ip = address.ipAddress else { return nil }
+        if case .v6(let ipv6) = address, ipv6.address.sin6_scope_id != 0 {
+            return "\(ip)%\(ipv6.address.sin6_scope_id)"
+        }
+        return ip
+    }
+
     private func configureClientPipeline(_ channel: Channel) -> EventLoopFuture<Void> {
-        // Order matters: HTTPRequestDecoder is a write-observing codec, so it must sit
-        // after the response encoder (tail-ward) to see unencoded outgoing parts.
-        let handler = HTTPForwardHandler(engine: self, tunnel: nil)
-        return channel.pipeline.addHandler(HTTPResponseEncoder(), name: HandlerName.encoder)
-            .flatMap { channel.pipeline.addHandler(ByteToMessageHandler(HTTPRequestDecoder()), name: HandlerName.decoder) }
-            .flatMap { channel.pipeline.addHandler(handler, name: HandlerName.frontend) }
+        // NIO waits for the child initializer before registering the channel for reads.
+        resolveClientApp(for: channel).flatMap { clientApp in
+            let handler = HTTPForwardHandler(engine: self, tunnel: nil, clientApp: clientApp)
+            return channel.pipeline.addHandler(HTTPResponseEncoder(), name: HandlerName.encoder)
+                .flatMap { channel.pipeline.addHandler(ByteToMessageHandler(HTTPRequestDecoder()), name: HandlerName.decoder) }
+                .flatMap { channel.pipeline.addHandler(handler, name: HandlerName.frontend) }
+        }
     }
 
     /// Open a connection to an upstream server, optionally wrapped in TLS.
