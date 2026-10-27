@@ -129,4 +129,20 @@ final class FlowRecorder: @unchecked Sendable {
             flow.timing.end = Date()
         }
     }
+
+    /// Fill in the owning app once async attribution lands. Only in-flight flows are
+    /// updated: a completed flow keeps the snapshots it already emitted, so late
+    /// attribution never re-emits a finished row.
+    func setClientApp(_ app: ClientApp?) {
+        guard let app else { return }
+        lock.lock()
+        guard flow.clientApp != app, flow.timing.end == nil, flow.error == nil else {
+            lock.unlock()
+            return
+        }
+        flow.clientApp = app
+        let snapshot = flow
+        lock.unlock()
+        onEmit(snapshot)
+    }
 }
