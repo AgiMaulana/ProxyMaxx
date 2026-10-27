@@ -2,8 +2,11 @@ import Foundation
 import FlowKit
 
 /// Resolves once per accepted connection, with libproc and AppKit work off the event loop.
+///
+/// Concurrent: browsers open many connections at once and each scan walks every
+/// process, so serializing lookups stalls every connection behind the first.
 public final class ClientAppResolver: ClientAppResolving, @unchecked Sendable {
-    private let queue = DispatchQueue(label: "oss.proxymaxx.clientkit.resolver", qos: .utility)
+    private let queue = DispatchQueue(label: "oss.proxymaxx.clientkit.resolver", qos: .utility, attributes: .concurrent)
     private let probe: any SocketOwnershipProbing
 
     public convenience init() {

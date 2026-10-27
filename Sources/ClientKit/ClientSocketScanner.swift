@@ -6,24 +6,23 @@ protocol SocketOwnershipProbing: Sendable {
 }
 
 /// Matches the client side of an established TCP connection against its full endpoint pair.
-final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
-    private let lock = NSLock()
-    private var pids = [Int32](repeating: 0, count: 1024)
-    private var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: 256)
-
+///
+/// Stateless, so concurrent lookups run in parallel: each scan uses its own buffers.
+final class ClientSocketScanner: SocketOwnershipProbing, Sendable {
     func pid(clientAddress: String, clientPort: Int, proxyAddress: String, proxyPort: Int) -> Int32? {
         guard let client = IPAddress(clientAddress), let proxy = IPAddress(proxyAddress),
               (1...65535).contains(clientPort), (1...65535).contains(proxyPort)
         else { return nil }
-        lock.lock()
-        defer { lock.unlock() }
+        let target = SocketEndpoints(client: client, clientPort: clientPort, proxy: proxy, proxyPort: proxyPort)
+        var pids = [Int32](repeating: 0, count: 1024)
+        let pidCount = Self.listPIDs(into: &pids)
+        guard pidCount > 0 else { return nil }
+        var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: 256)
         var owner: Int32?
-
-        let count = listPIDs()
-        for index in 0..<count {
+        for index in 0..<pidCount {
             let pid = pids[index]
             guard pid > 0 else { continue }
-            if owns(pid: pid, client: client, clientPort: clientPort, proxy: proxy, proxyPort: proxyPort) {
+            if Self.owns(pid: pid, descriptors: &descriptors, target: target) {
                 guard owner == nil || owner == pid else { return nil }
                 owner = pid
             }
@@ -31,7 +30,7 @@ final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
         return owner
     }
 
-    private func listPIDs() -> Int {
+    private static func listPIDs(into pids: inout [Int32]) -> Int {
         while true {
             let written = pids.withUnsafeMutableBytes {
                 Int(proc_listallpids($0.baseAddress, Int32($0.count)))
@@ -42,7 +41,7 @@ final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
         }
     }
 
-    private func listDescriptors(pid: Int32) -> Int {
+    private static func listDescriptors(pid: Int32, into descriptors: inout [proc_fdinfo]) -> Int {
         while true {
             let written = descriptors.withUnsafeMutableBytes {
                 Int(proc_pidinfo(pid, PROC_PIDLISTFDS, 0, $0.baseAddress, Int32($0.count)))
@@ -54,8 +53,8 @@ final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
         }
     }
 
-    private func owns(pid: Int32, client: IPAddress, clientPort: Int, proxy: IPAddress, proxyPort: Int) -> Bool {
-        let count = listDescriptors(pid: pid)
+    private static func owns(pid: Int32, descriptors: inout [proc_fdinfo], target: SocketEndpoints) -> Bool {
+        let count = listDescriptors(pid: pid, into: &descriptors)
         for index in 0..<count {
             let descriptor = descriptors[index]
             guard descriptor.proc_fdtype == PROX_FDTYPE_SOCKET else { continue }
@@ -69,18 +68,18 @@ final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
                   info.psi.soi_proto.pri_tcp.tcpsi_state == TSI_S_ESTABLISHED
             else { continue }
             let socket = info.psi.soi_proto.pri_tcp.tcpsi_ini
-            guard Self.port(socket.insi_lport) == clientPort,
-                  Self.port(socket.insi_fport) == proxyPort
+            guard Self.port(socket.insi_lport) == target.clientPort,
+                  Self.port(socket.insi_fport) == target.proxyPort
             else { continue }
 
             if socket.insi_vflag & UInt8(INI_IPV4) != 0 {
-                if client == .ipv4(UInt32(bigEndian: socket.insi_laddr.ina_46.i46a_addr4.s_addr)),
-                   proxy == .ipv4(UInt32(bigEndian: socket.insi_faddr.ina_46.i46a_addr4.s_addr)) {
+                if target.client == .ipv4(UInt32(bigEndian: socket.insi_laddr.ina_46.i46a_addr4.s_addr)),
+                   target.proxy == .ipv4(UInt32(bigEndian: socket.insi_faddr.ina_46.i46a_addr4.s_addr)) {
                     return true
                 }
             } else if socket.insi_vflag & UInt8(INI_IPV6) != 0 {
-                if client == IPAddress(socket.insi_laddr.ina_6),
-                   proxy == IPAddress(socket.insi_faddr.ina_6) {
+                if target.client == IPAddress(socket.insi_laddr.ina_6),
+                   target.proxy == IPAddress(socket.insi_faddr.ina_6) {
                     return true
                 }
             }
@@ -91,6 +90,14 @@ final class ClientSocketScanner: SocketOwnershipProbing, @unchecked Sendable {
     private static func port(_ raw: Int32) -> Int {
         Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: raw)))
     }
+}
+
+/// The full endpoint pair that identifies one side of an accepted connection.
+private struct SocketEndpoints {
+    let client: IPAddress
+    let clientPort: Int
+    let proxy: IPAddress
+    let proxyPort: Int
 }
 
 private enum IPAddress: Equatable {
