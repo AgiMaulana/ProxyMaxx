@@ -92,7 +92,7 @@ struct MapLocalView: View {
         } message: {
             Text(L10n.format("mapLocal.bundle.removeMessage", bundleToRemove?.displayName ?? ""))
         }
-        .onChange(of: visibleRows.map(\.id)) { ids in
+        .onChange(of: visibleRows.map(\.id)) { _, ids in
             selection.formIntersection(ids)
         }
     }
