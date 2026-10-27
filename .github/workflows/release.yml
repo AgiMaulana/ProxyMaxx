@@ -18,15 +18,26 @@ permissions:
 jobs:
   build:
     name: Build release bundle
-    # The app is SwiftUI, so the runner has to be macOS. macos-15 ships Xcode 16, which
-    # covers the package's swift-tools-version 5.10 and the macOS 14 deployment target.
-    runs-on: macos-15
+    # The app is SwiftUI, so the runner has to be macOS. macos-15 ships Swift 6.1, which is
+    # older than several pinned dependencies ask for (swift-log needs 6.2, swift-collections
+    # 1.7.2+ needs 6.4), and SwiftPM treats that as a hard error. macos-26 ships Swift 6.2+,
+    # so the dependency pins have to stay at or below that line — see the guard below.
+    runs-on: macos-26
     steps:
       # fetch-depth: 0 so git-cliff can read the full history for release notes.
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # SwiftPM silently re-resolves a stale or too-new Package.resolved on some versions
+      # and hard-errors on others, so the release was building whatever the toolchain
+      # happened to allow. Resolve strictly from the lockfile instead: a pin that needs a
+      # newer Swift than the image ships fails here, by name, before the long build.
+      - name: Verify the pinned dependencies
+        run: |
+          swift --version
+          swift package resolve --force-resolved-versions
 
       - name: Set up JDK
         uses: actions/setup-java@v5
