@@ -128,6 +128,7 @@
 /* MARK: Local Override */
 "mapLocal.enable" = "Enable Local Override";
 "mapLocal.enabled" = "Enabled";
+"mapLocal.disabled" = "Disabled";
 "mapLocal.ruleCountOne" = "1 rule";
 "mapLocal.ruleCount" = "%lld rules";
 "mapLocal.activate" = "Activate";
