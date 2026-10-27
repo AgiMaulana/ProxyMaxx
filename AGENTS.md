@@ -42,6 +42,7 @@ ProxyMaxx is a free, open-source HTTP/HTTPS debugging proxy for macOS (MIT licen
   - `Scripts/build-cli.sh` (copies to `Resources/proxymaxx-cli`)
 - **Build Browser Extensions**:
   - `Scripts/build-browser-extension.sh`
+- **UI Parity With Releases**: build through `Scripts/run.sh` or `Scripts/bundle-app.sh`, never a bare `swift build`, for anything you intend to look at. Both scripts pass `-platform_version` (see `Scripts/macos-sdk-flags.sh`), so the binary records the real macOS SDK version. Without it the binary records the deployment target (`14.0`) and macOS 26 renders the pre-Tahoe interface instead of the released app's current one; `Scripts/bundle-app.sh` fails the build if the record is wrong.
 - **Bundle macOS App (`dist/ProxyMaxx.app`)**:
   - `Scripts/bundle-app.sh`
   - `Scripts/bundle-app.sh release --with-android-vpn`

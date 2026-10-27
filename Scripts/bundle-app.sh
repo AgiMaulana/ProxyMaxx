@@ -35,8 +35,12 @@ done
 
 cd "$ROOT"
 
+# Without these the binary records the deployment target as its SDK and the bundle renders
+# the pre-Tahoe interface while the released app renders the current one — see the file.
+source "$ROOT/Scripts/macos-sdk-flags.sh"
+
 echo "==> Building ($CONFIGURATION)"
-swift build -c "$CONFIGURATION"
+swift build -c "$CONFIGURATION" "${MACOS_SDK_LINK_FLAGS[@]}"
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 
 # Companions are generated, never checked in. Staging them here rather than trusting a
@@ -142,6 +146,17 @@ check_signature() {
     codesign --verify --strict "$APP/$1" >/dev/null 2>&1 || problems+=("invalid signature: $1")
 }
 
+# The SDK version recorded in LC_BUILD_VERSION is what macOS 26 reads to decide between the
+# Tahoe redesign and the previous interface. A build that lost it still launches, just with
+# the wrong look — so assert it rather than trusting the linker flags above.
+check_linked_sdk() {
+    [[ -e "$APP/$1" ]] || return
+    local recorded
+    recorded="$(vtool -show-build "$APP/$1" 2>/dev/null | awk '/^ *sdk /{print $2; exit}')"
+    [[ "$recorded" == "$MACOS_SDK_VERSION" ]] ||
+        problems+=("records SDK ${recorded:-none}: $1 (expected $MACOS_SDK_VERSION)")
+}
+
 check_present "Contents/MacOS/ProxyMaxx"
 check_present "Contents/Resources/proxymaxx-cli"
 check_present "Contents/Resources/Browser/proxymaxx-extension/manifest.json"
@@ -161,12 +176,13 @@ check_signature "Contents/MacOS/ProxyMaxx"
 check_signature "Contents/MacOS/proxymaxx-browser-host"
 check_signature "Contents/Resources/proxymaxx-cli"
 codesign --verify --strict "$APP" >/dev/null 2>&1 || problems+=("invalid signature: ProxyMaxx.app seal")
+check_linked_sdk "Contents/MacOS/ProxyMaxx"
 
 if (( ${#problems[@]} > 0 )); then
     printf '❌ %s\n' "${problems[@]}" >&2
     exit 1
 fi
-echo "    all companions present; signatures valid"
+echo "    all companions present; signatures valid; linked against SDK $MACOS_SDK_VERSION"
 
 echo "==> Done: $APP"
 echo "    Open with: open \"$APP\""
