@@ -183,32 +183,29 @@ struct MapLocalView: View {
             TableColumn("mapLocal.order") { row in
                 Text(verbatim: "\(row.order)")
                     .monospacedDigit()
+                    .foregroundStyle(row.rule.isEnabled ? .primary : .secondary)
             }
             .width(38)
-            TableColumn("") { row in
-                let rule = row.rule
-                Toggle("mapLocal.enabled", isOn: Binding(
-                    get: { rule.isEnabled },
-                    set: { rules.setMapLocalRule(id: rule.id, enabled: $0); onApply() }
-                ))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .accessibilityLabel(Text(L10n.format("mapLocal.toggleRule", rule.displayName)))
-            }
-            .width(32)
             TableColumn("common.name") { row in
                 let rule = row.rule
-                Text(rule.displayName).lineLimit(1).help(rule.displayName)
+                Text(rule.displayName)
+                    .lineLimit(1)
+                    .help(rule.displayName)
+                    .foregroundStyle(rule.isEnabled ? .primary : .secondary)
             }
             .width(min: 100, ideal: 140, max: 200)
             TableColumn("common.method") { row in
                 let rule = row.rule
-                Text(rule.method.displayName).font(.system(.caption, design: .monospaced))
+                Text(rule.method.displayName)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(rule.isEnabled ? .primary : .secondary)
             }
             .width(65)
             TableColumn("mapLocal.matchStyleColumn") { row in
                 let rule = row.rule
-                Text(rule.matchStyle.displayName).lineLimit(1)
+                Text(rule.matchStyle.displayName)
+                    .lineLimit(1)
+                    .foregroundStyle(rule.isEnabled ? .primary : .secondary)
             }
             .width(110)
             TableColumn("mapLocal.matchingURLs") { row in
@@ -218,6 +215,7 @@ struct MapLocalView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(rule.url)
+                    .foregroundStyle(rule.isEnabled ? .primary : .secondary)
             }
             .width(min: 150, ideal: 230)
             TableColumn("mapLocal.mapFrom") { row in
@@ -228,6 +226,7 @@ struct MapLocalView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(rule.destination.path)
+                    .foregroundStyle(rule.isEnabled ? .primary : .secondary)
             }
             .width(min: 160, ideal: 220)
         }
