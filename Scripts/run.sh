@@ -14,7 +14,12 @@ if [[ "${1:-}" == "debug" || "${1:-}" == "release" ]]; then
 fi
 
 cd "$ROOT"
-swift build -c "$CONFIGURATION"
+
+# Without these the binary records the deployment target as its SDK and macOS renders the
+# pre-Tahoe interface while the released app renders the current one — see the file.
+source "$ROOT/Scripts/macos-sdk-flags.sh"
+
+swift build -c "$CONFIGURATION" "${MACOS_SDK_LINK_FLAGS[@]}"
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 
 # SwiftUI resolves LocalizedStringKey through Bundle.main. For an unbundled
