@@ -54,13 +54,22 @@ public struct RuleFile: Codable, Equatable, Sendable {
 
     /// Write the rule file atomically, creating its parent directory as needed.
     public func write(to url: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(self)
+        let data = try encoded()
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try data.write(to: url, options: .atomic)
+    }
+
+    /// The exact bytes this file occupies on disk.
+    ///
+    /// Deterministic on purpose (sorted keys, pretty printed): a writer can compare what it
+    /// encoded against what is actually in the file to notice that another process has
+    /// replaced it since.
+    public func encoded() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(self)
     }
 }

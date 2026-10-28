@@ -18,6 +18,15 @@ public final class RuleStore: ObservableObject {
     /// what unit tests want so they never read each other's leftovers.
     private let persistenceURL: URL?
     private var cancellables = Set<AnyCancellable>()
+    /// The bytes this store last read from, or wrote to, `persistenceURL`. Comparing the
+    /// file against this is how the store notices an outside writer.
+    private var lastPersistedBytes: Data?
+    /// True when a change made *here* has not reached disk yet. Only such a change is
+    /// allowed to replace a file that changed underneath us.
+    private var hasPendingLocalChanges = false
+    /// Set while adopting an external revision, so its `@Published` writes are not
+    /// mistaken for a local edit.
+    private var isReloadingFromDisk = false
 
     /// The on-disk location the app uses, under `Application Support/ProxyMaxx`.
     public static var defaultPersistenceURL: URL {
@@ -32,6 +41,15 @@ public final class RuleStore: ObservableObject {
         if let persistenceURL {
             loadSavedState(from: persistenceURL)
         }
+        // Mark the store dirty the moment a value changes, before the debounce: the save
+        // that eventually runs has to know whether this store or an outside writer is the
+        // newer revision.
+        objectWillChange
+            .sink { [weak self] _ in
+                guard let self, !self.isReloadingFromDisk else { return }
+                self.hasPendingLocalChanges = true
+            }
+            .store(in: &cancellables)
         objectWillChange
             .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.save() }
@@ -40,7 +58,17 @@ public final class RuleStore: ObservableObject {
 
     /// Read back a previous run's rules. A missing or corrupt file leaves the defaults.
     private func loadSavedState(from url: URL) {
-        let state = RuleFile.load(from: url)
+        isReloadingFromDisk = true
+        defer {
+            isReloadingFromDisk = false
+            hasPendingLocalChanges = false
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            lastPersistedBytes = nil
+            return
+        }
+        lastPersistedBytes = data
+        guard let state = try? JSONDecoder().decode(RuleFile.self, from: data) else { return }
         isSSLProxyingEnabled = state.isSSLProxyingEnabled
         sslProxyingPolicy = state.sslProxyingPolicy
         isMapLocalEnabled = state.isMapLocalEnabled
@@ -50,9 +78,29 @@ public final class RuleStore: ObservableObject {
 
     private func save() {
         guard let persistenceURL else { return }
+
+        // `proxymaxx-cli` writes this same file directly whenever the app is not hosting
+        // the engine, so the in-memory copy here can be stale. Overwriting it with that
+        // copy is what made a CLI mutation report `ok: true` and then vanish on quit.
+        // Adopt the newer revision instead; only a change made in this app since it last
+        // read or wrote the file may replace what is there.
+        if !hasPendingLocalChanges,
+           let onDisk = try? Data(contentsOf: persistenceURL),
+           onDisk != lastPersistedBytes {
+            loadSavedState(from: persistenceURL)
+            return
+        }
+
         // Best-effort: losing one save on a full disk beats throwing inside a Combine
         // sink, and the atomic write keeps a crash from truncating the file.
-        try? currentRuleFile().write(to: persistenceURL)
+        guard let data = try? currentRuleFile().encoded() else { return }
+        try? FileManager.default.createDirectory(
+            at: persistenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        guard (try? data.write(to: persistenceURL, options: .atomic)) != nil else { return }
+        lastPersistedBytes = data
+        hasPendingLocalChanges = false
     }
 
     /// A snapshot of everything the store holds, in the on-disk `RuleFile` shape.
