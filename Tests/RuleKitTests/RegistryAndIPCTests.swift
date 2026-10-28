@@ -281,4 +281,39 @@ final class FlowSpoolTests: XCTestCase {
         writer.clear()
         XCTAssertTrue(FlowSpool.pendingURLs(directory: directory).isEmpty)
     }
+
+    /// A snapshot carries the flow's whole body, so the snapshot count cannot bound disk
+    /// use. A GUI-only session has no peer consuming the spool, and finished flows are
+    /// never rewritten, so the directory grew to one file per captured flow.
+    func testByteCapEvictsOldestFlows() throws {
+        let writer = FlowSpool.Writer(directory: directory, maxSnapshots: 1_000, maxBytes: 60_000)
+
+        for index in 0..<30 {
+            writer.write(flow("/flow\(index)", body: String(repeating: "x", count: 8_000)))
+        }
+
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])
+        let total = try files.reduce(0) { sum, url in
+            sum + (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+        }
+        XCTAssertLessThanOrEqual(total, 60_000, "spool must stay inside the byte budget")
+
+        let paths = FlowSpool.pendingURLs(directory: directory).compactMap {
+            FlowSpool.read($0)?.request.path
+        }
+        XCTAssertEqual(paths.last, "/flow29", "newest snapshot must be retained")
+        XCTAssertFalse(paths.contains("/flow0"), "oldest flows must be evicted first")
+    }
+
+    /// A single snapshot larger than the whole budget must not evict itself; the reader
+    /// would then see an empty spool even though traffic was captured.
+    func testOversizedSnapshotIsStillRetained() throws {
+        let writer = FlowSpool.Writer(directory: directory, maxSnapshots: 10, maxBytes: 1_000)
+        writer.write(flow("/huge", body: String(repeating: "y", count: 8_000)))
+
+        let paths = FlowSpool.pendingURLs(directory: directory).compactMap {
+            FlowSpool.read($0)?.request.path
+        }
+        XCTAssertEqual(paths, ["/huge"])
+    }
 }
