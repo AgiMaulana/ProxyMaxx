@@ -130,6 +130,40 @@ final class SessionLogFollowerTests: XCTestCase {
         XCTAssertTrue(follower.poll().isEmpty)
     }
 
+    /// The line cap cannot bound disk use on its own: a line is a whole flow snapshot, so
+    /// a session of large bodies can reach many gigabytes while never tripping `maxLines`.
+    /// The byte cap is what actually protects the disk.
+    func testByteCapCompactsTheLog() throws {
+        let writer = SessionLog.Writer(url: url, maxLines: 1_000_000, maxBytes: 8_192)
+
+        for index in 0..<40 {
+            writer.append(makeFlow("/flow\(index)", body: String(repeating: "x", count: 2_048)))
+        }
+
+        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0
+        XCTAssertLessThanOrEqual(size, 8_192, "log must stay inside the byte budget")
+
+        // Retention keeps the newest flows, not the oldest.
+        let paths = SessionLog.read(url: url).map(\.request.path)
+        XCTAssertEqual(paths.last, "/flow39")
+        XCTAssertFalse(paths.contains("/flow0"), "oldest flows must be dropped")
+    }
+
+    /// Compaction after trimming must leave a log a follower can keep reading, rather
+    /// than a fragment whose first line is a partial write.
+    func testCompactionKeepsTheLogLineAddressable() throws {
+        let writer = SessionLog.Writer(url: url, maxLines: 1_000_000, maxBytes: 4_096)
+
+        for index in 0..<30 {
+            writer.append(makeFlow("/flow\(index)", body: String(repeating: "y", count: 1_024)))
+        }
+
+        let lines = try String(contentsOf: url, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+        XCTAssertEqual(lines.last, "", "compaction must end the file on a line boundary")
+        XCTAssertEqual(SessionLog.read(url: url).count, lines.count - 1, "every retained line must decode")
+    }
+
     private func makeFlow(_ path: String, body: String = "hello", closed: Bool = true) -> Flow {
         var flow = Flow(request: HTTPRequest(
             method: "GET",

@@ -29,13 +29,23 @@ public enum SessionLog {
         /// Soft cap on retained lines. When exceeded the log is compacted down to its
         /// newest half in one atomic rewrite, so a long session cannot fill the disk.
         public var maxLines: Int
+        /// Soft cap on retained **bytes**, which is the cap that actually protects the
+        /// disk. A line is a whole flow snapshot, so its size is set by the response body
+        /// it carries, not by anything the engine controls: a few hundred multi-megabyte
+        /// responses fit inside `maxLines` while running to tens of gigabytes. The line
+        /// cap alone therefore cannot bound disk use, and a 15 GB session has been
+        /// observed in the field with `maxLines` never tripped.
+        public var maxBytes: Int
         private let lock = NSLock()
         /// Lines appended since the last reset, so the cap is checked without rescanning.
         private var lineCount = 0
+        /// Bytes appended since the last reset, tracked for the same reason.
+        private var byteCount = 0
 
-        public init(url: URL = SessionLog.defaultURL, maxLines: Int = 50_000) {
+        public init(url: URL = SessionLog.defaultURL, maxLines: Int = 50_000, maxBytes: Int = 256 * 1024 * 1024) {
             self.url = url
             self.maxLines = maxLines
+            self.maxBytes = maxBytes
         }
 
         /// Start a fresh session: truncate whatever a previous run left behind, so a
@@ -48,6 +58,7 @@ public enum SessionLog {
             )
             _ = FileManager.default.createFile(atPath: url.path, contents: Data())
             lineCount = 0
+            byteCount = 0
         }
 
         /// Append one snapshot as a single NDJSON line. The trailing newline is written
@@ -65,24 +76,88 @@ public enum SessionLog {
             guard let handle = try? FileHandle(forWritingTo: url) else { return }
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: payload + Data("\n".utf8))
+            let line = payload + Data("\n".utf8)
+            try? handle.write(contentsOf: line)
             lineCount += 1
-            if lineCount > maxLines { compact() }
+            byteCount += line.count
+            if lineCount > maxLines || byteCount > maxBytes { compact() }
         }
 
         /// Keep only the newest half of the log, in one atomic replace. A follower
         /// notices the shrink (its offset now exceeds the file) and restarts from zero.
+        ///
+        /// Only the retained tail is read, never the whole file: the log this has to
+        /// compact is by definition the oversized one, and slurping a multi-gigabyte file
+        /// into memory to rewrite it is what turns a full disk into an unresponsive app.
+        ///
+        /// Retention is applied from the newest line backwards, so the result always keeps
+        /// at least one line even when a single flow snapshot is larger than the budget.
+        /// Dropping everything instead would empty the log and then rewrite it on the next
+        /// append, which is far worse than one oversized line.
         private func compact() {
-            guard let data = try? Data(contentsOf: url) else { return }
-            let lines = data.split(separator: 0x0A, omittingEmptySubsequences: true)
-            let keep = lines.suffix(maxLines / 2)
+            let byteBudget = UInt64(max(1, maxBytes / 2))
+            let lineBudget = max(1, maxLines / 2)
+
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return }
+            defer { try? handle.close() }
+            guard let size = (try? handle.seekToEnd()).map({ UInt64($0) }), size > 0 else { return }
+
+            // Widen the window by quarters until it holds at least one complete line.
+            // Normal logs stop at the first window; only a single line bigger than the
+            // whole budget forces the loop further in.
+            var window = byteBudget
+            var kept: [Data] = []
+            while true {
+                let start = size > window ? size - window : 0
+                _ = try? handle.seek(toOffset: start)
+                guard let chunk = try? handle.readToEnd() else { return }
+
+                var tail = chunk
+                if start > 0 {
+                    // The window began mid-line, so that fragment is not a record.
+                    guard let newline = chunk.firstIndex(of: 0x0A) else {
+                        window = nextWindow(window, size: size)
+                        continue
+                    }
+                    tail = Data(chunk[chunk.index(after: newline)...])
+                }
+
+                let lines = tail.split(separator: 0x0A, omittingEmptySubsequences: true)
+                if lines.isEmpty {
+                    window = nextWindow(window, size: size)
+                    continue
+                }
+                kept = Self.newest(lines, byteBudget: byteBudget, lineBudget: lineBudget)
+                break
+            }
+
             var rewritten = Data()
-            for line in keep {
+            for line in kept {
                 rewritten.append(contentsOf: line)
                 rewritten.append(0x0A)
             }
             try? rewritten.write(to: url, options: .atomic)
-            lineCount = keep.count
+            lineCount = kept.count
+            byteCount = rewritten.count
+        }
+
+        /// Grow the read window, never past the file itself, so the loop always ends.
+        private func nextWindow(_ window: UInt64, size: UInt64) -> UInt64 {
+            min(size, window > UInt64.max / 4 ? UInt64.max : window * 4)
+        }
+
+        /// The newest lines that fit both budgets, always at least one.
+        private static func newest(_ lines: [Data.SubSequence], byteBudget: UInt64, lineBudget: Int) -> [Data] {
+            var kept: [Data] = []
+            var total = 0
+            for line in lines.reversed() {
+                let cost = line.count + 1
+                let wouldExceed = total + cost > Int(clamping: byteBudget) || kept.count >= lineBudget
+                if !kept.isEmpty && wouldExceed { break }
+                kept.append(Data(line))
+                total += cost
+            }
+            return kept.reversed()
         }
     }
 
