@@ -201,15 +201,25 @@ jobs:
             } >> CHANGES.md
           fi
 
-      # Idempotent: a fresh tag creates the release; a re-run re-uploads the assets.
-      - name: Create GitHub release
+      # Idempotent: a fresh tag creates the release; a re-run refreshes an existing one.
+      # Publishing from the GitHub web UI creates the release (and the tag) before this
+      # workflow starts, so `gh release create` never runs for it. That path left v0.4.0
+      # with an empty body, so an existing release with no notes gets its body filled here.
+      # A body someone typed by hand is theirs to keep: only an empty one is written to.
+      # `gh release edit` takes no --generate-notes, so the fallback stays on the create path.
+      - name: Create or refresh GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTES="--generate-notes"
           if [[ -s CHANGES.md ]]; then NOTES="--notes-file CHANGES.md"; fi
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists — uploading assets"
+            echo "Release ${GITHUB_REF_NAME} already exists — refreshing it"
+            BODY="$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)"
+            if [[ -s CHANGES.md && -z "${BODY}" ]]; then
+              echo "Notes are empty — writing the generated ones"
+              gh release edit "${GITHUB_REF_NAME}" --notes-file CHANGES.md
+            fi
             gh release upload "${GITHUB_REF_NAME}" dist/*.dmg --clobber
           else
             gh release create "${GITHUB_REF_NAME}" dist/*.dmg \
