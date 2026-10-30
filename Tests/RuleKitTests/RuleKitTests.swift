@@ -432,6 +432,53 @@ final class RuleStorePersistenceTests: XCTestCase {
         let reloaded = RuleStore(persistenceURL: url)
         XCTAssertTrue(reloaded.mapLocalRules.isEmpty)
     }
+
+    /// `proxymaxx-cli` writes this same `rules.json` directly whenever the app is not
+    /// hosting the engine. The app then held a stale copy and wrote it back on quit, so a
+    /// CLI mutation could report `ok: true` and still be gone — which is exactly what
+    /// happened while the engine was stopped and the app was merely open.
+    @MainActor
+    func testFlushKeepsARulesFileWrittenByAnotherProcess() throws {
+        let url = temporaryRulesFile()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        let store = RuleStore(persistenceURL: url)
+        store.addExclude("app.example.com")
+        store.flushRulesToDisk()
+
+        // Another writer replaces the file while the app still holds the older revision.
+        var external = try JSONDecoder().decode(RuleFile.self, from: Data(contentsOf: url))
+        external.sslProxyingPolicy.exclude.append("cli.example.com")
+        try external.write(to: url)
+
+        // Quitting flushes the store; it must not resurrect its stale copy.
+        store.flushRulesToDisk()
+
+        let onDisk = try JSONDecoder().decode(RuleFile.self, from: Data(contentsOf: url))
+        XCTAssertEqual(onDisk.sslProxyingPolicy.exclude, ["app.example.com", "cli.example.com"])
+    }
+
+    /// The other half of the same rule: a change made in the app is the newer intent and
+    /// must still reach disk, even though the file changed underneath it.
+    @MainActor
+    func testALocalChangeStillReachesDiskAfterAnOutsideWrite() throws {
+        let url = temporaryRulesFile()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        let store = RuleStore(persistenceURL: url)
+        store.addExclude("app.example.com")
+        store.flushRulesToDisk()
+
+        var external = try JSONDecoder().decode(RuleFile.self, from: Data(contentsOf: url))
+        external.sslProxyingPolicy.exclude.append("cli.example.com")
+        try external.write(to: url)
+
+        store.addExclude("user.example.com")
+        store.flushRulesToDisk()
+
+        let onDisk = try JSONDecoder().decode(RuleFile.self, from: Data(contentsOf: url))
+        XCTAssertEqual(onDisk.sslProxyingPolicy.exclude, ["app.example.com", "user.example.com"])
+    }
 }
 
 final class MapLocalModelTests: XCTestCase {
