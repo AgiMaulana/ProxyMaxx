@@ -13,4 +13,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.flushCrossToolStateBeforeExit()
         model?.ruleStore.flushRulesToDisk()
     }
+
+    /// A window-less launch leaves the app running with capture on and nothing to look at:
+    /// clicking the Dock icon reopens what the Scene closed, which keeps the engine's
+    /// session reachable instead of asking the user to quit and relaunch.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else { return true }
+        sender.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
+        for window in sender.windows where window.canBecomeKey {
+            window.makeKeyAndOrderFront(nil)
+            break
+        }
+        sender.activate(ignoringOtherApps: true)
+        return true
+    }
 }

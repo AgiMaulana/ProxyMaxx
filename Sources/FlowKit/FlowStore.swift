@@ -52,6 +52,8 @@ public final class FlowStore: ObservableObject {
             flows.append(flow)
             evictIfNeeded()
         }
+        // Label before publishing: the sidebar and filter read it from the same batch.
+        if let device = flow.connectedDevice { DeviceAttribution.record(device, for: flow.id) }
         schedulePublish()
     }
 

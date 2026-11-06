@@ -1,6 +1,7 @@
 import SwiftUI
 import FlowKit
 import RuleKit
+import SystemKit
 import CodeGenKit
 struct MainView: View {
     @EnvironmentObject var model: AppModel
@@ -12,6 +13,8 @@ struct MainView: View {
     @State private var showSSLProxying = false
     @State private var showCertificates = false
     @State private var showLog = false
+    /// Set when capture emptied the table and left a device selection whose emulator stopped.
+    @State private var deviceGone = false
 
     var body: some View {
         // Derived once per pass. `flows` was a computed property read five times, each
@@ -67,6 +70,11 @@ struct MainView: View {
             selection = nil
             switch filter.sidebarSelection {
             case .client, .app: filter.sidebarSelection = .all
+            case .device(let serial) where !model.connectedDevices.contains(where: { $0.serial == serial }):
+                // The chosen emulator stopped: say so next to the empty table rather than
+                // silently widening the list back to every device's traffic.
+                filter.sidebarSelection = .all
+                deviceGone = true
             default: break
             }
         }
@@ -85,6 +93,15 @@ struct MainView: View {
                 sidebarRow(L10n.string("main.all"), systemImage: "tray", selection: .all, count: summary.total)
                 sidebarRow(L10n.string("main.pinned"), systemImage: "pin", selection: .pinned, count: summary.pinned)
                 sidebarRow(L10n.string("main.saved"), systemImage: "bookmark", selection: .saved, count: summary.saved)
+            }
+
+            if !model.connectedDevices.isEmpty {
+                let counts = DeviceFlowCounts(flowStore.flows)
+                Section(header: Text(L10n.format("main.devices", model.connectedDevices.count))) {
+                    ForEach(model.connectedDevices) { device in
+                        deviceRow(device, count: counts.count(for: device.serial))
+                    }
+                }
             }
 
             if !summary.apps.isEmpty {
@@ -113,7 +130,11 @@ struct MainView: View {
     private var sidebarSelection: Binding<SidebarSelection?> {
         Binding(
             get: { filter.sidebarSelection },
-            set: { if let selection = $0 { filter.sidebarSelection = selection } }
+            set: {
+                guard let selection = $0 else { return }
+                filter.sidebarSelection = selection
+                deviceGone = false
+            }
         )
     }
 
@@ -124,7 +145,26 @@ struct MainView: View {
             Spacer()
             sidebarCount(count)
         }
+        .contentShape(Rectangle())
         .tag(selection)
+    }
+
+    /// One connected device. The Help view explains the shared emulator address, so it sits
+    /// on the icon alone: inside the Label it swallowed the click before the row could be
+    /// selected, because the tooltip view takes hover input across the whole row.
+    private func deviceRow(_ device: AndroidDevice, count: Int) -> some View {
+        HStack {
+            Label {
+                Text(L10n.string(device.displayName)).lineLimit(1)
+            } icon: {
+                Image(systemName: device.isEmulator ? "android" : "candybarphone")
+                    .help(L10n.string("main.devicesHelp"))
+            }
+            Spacer()
+            sidebarCount(count)
+        }
+        .contentShape(Rectangle())
+        .tag(SidebarSelection.device(device.serial))
     }
 
     private func sidebarCount(_ count: Int) -> some View {
@@ -158,7 +198,10 @@ struct MainView: View {
             for flow in flows {
                 if flow.isPinned { pinned += 1 }
                 if flow.response != nil || flow.error != nil { saved += 1 }
-                if let app = flow.clientApp {
+                // A flow already credited to a device is not also counted under the process
+                // that relayed it: the emulator's `netsimd` would otherwise list the device's
+                // traffic twice, once as the device and once as the relay.
+                if let app = flow.clientApp, flow.connectedDevice == nil {
                     let id = app.id
                     apps[id, default: AppSummary(id: id, app: app)].count += 1
                     if apps[id]?.app.path == nil, app.path != nil {
@@ -185,6 +228,20 @@ struct MainView: View {
         }
 
         func domainCount(_ domain: String) -> Int { domainCounts[domain] ?? 0 }
+    }
+
+    /// Flows per connected device, counted in one pass like `FlowSummary`.
+    private struct DeviceFlowCounts {
+        private var counts: [String: Int] = [:]
+
+        init(_ flows: [Flow]) {
+            for flow in flows {
+                guard let serial = flow.connectedDevice?.serial else { continue }
+                counts[serial, default: 0] += 1
+            }
+        }
+
+        func count(for serial: String) -> Int { counts[serial] ?? 0 }
     }
 
     private var errorBinding: Binding<Bool> {
@@ -395,7 +452,17 @@ struct MainView: View {
             .width(64)
 
             TableColumn("common.client") { flow in
-                if let app = flow.clientApp {
+                if let device = flow.connectedDevice {
+                    Label(device.name, systemImage: "candybarphone")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .help(device.address)
+                } else if flow.origin == .remoteDevice {
+                    Text("client.remoteDevice")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(Text(verbatim: flow.clientAddress ?? ""))
+                } else if let app = flow.clientApp {
                     ClientAppLabel(app: app)
                         .font(.caption)
                 } else {
@@ -411,10 +478,15 @@ struct MainView: View {
         .overlay {
             if flows.isEmpty {
                 VStack(spacing: 6) {
-                    Text(L10n.string(flowStore.flows.isEmpty ? "main.noCapturedFlows" : "main.noMatchingFlows"))
-                    Text(L10n.string(flowStore.flows.isEmpty ? "main.captureHint" : "main.filterHint"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    if deviceGone {
+                        Text("main.deviceStopped")
+                        Text("main.devicesHelp").font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        Text(L10n.string(flowStore.flows.isEmpty ? "main.noCapturedFlows" : "main.noMatchingFlows"))
+                        Text(L10n.string(flowStore.flows.isEmpty ? "main.captureHint" : "main.filterHint"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)

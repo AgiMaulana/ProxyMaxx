@@ -13,6 +13,8 @@ public enum SidebarSelection: Hashable, Equatable, Sendable, Codable {
     case app(String)
     case client(String)
     case domain(String)
+    /// One connected emulator or device, selected by `adb` serial.
+    case device(String)
 }
 
 /// Text, method, error and sidebar filtering applied to the captured flow list.
@@ -62,6 +64,8 @@ public struct FlowFilter: Equatable, Sendable, Codable {
             if flow.clientApp?.id != id { return false }
         case .domain(let hostName):
             if flow.host.caseInsensitiveCompare(hostName) != .orderedSame { return false }
+        case .device(let serial):
+            if flow.connectedDevice?.serial != serial { return false }
         }
 
         guard !text.isEmpty else { return true }

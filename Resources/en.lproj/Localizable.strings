@@ -100,12 +100,19 @@
 "main.captureHint" = "Start the proxy and send a request through it.";
 "main.noMatchingFlows" = "No matching flows";
 "main.filterHint" = "Change the filters or choose All in the sidebar.";
+"main.devices" = "Devices (%lld)";
+"main.devicesHelp" = "A connected Android emulator running on this Mac, taken from adb. Emulator traffic arrives from 10.0.2.2, so the first running emulator owns that address.";
+"main.deviceStopped" = "That emulator stopped";
 
 /* MARK: Client attribution */
 "client.unknown" = "Unknown";
 "client.unavailable" = "No local app was identified for this connection.";
 "client.bundleIdentifier" = "Bundle ID";
 "client.pid" = "PID";
+"client.remoteDevice" = "Remote device";
+"client.remoteDeviceUnattributed" = "The connection came from another device, but no running emulator answers to its address.";
+"client.deviceSerial" = "Device serial";
+"client.address" = "Address";
 
 /* MARK: Flow inspector */
 "inspector.decoded" = "decoded %@";

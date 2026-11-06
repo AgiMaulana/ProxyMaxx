@@ -94,3 +94,64 @@ public extension Flow {
     var responseBytes: Int { response?.body.count ?? 0 }
     var requestBytes: Int { request.body.count }
 }
+
+public extension Flow {
+    /// The device the flow's peer address belongs to, once the engine has matched it against
+    /// the devices `adb` reports. Not part of the session format: flows stored before the
+    /// engine knew about devices keep nil, which `FlowFilter` treats as "no device".
+    var connectedDevice: ConnectedDevice? { DeviceAttribution.connectedDevice(id: id) }
+}
+
+/// Device label for a peer address, resolved by the engine off the event loop.
+public struct ConnectedDevice: Codable, Hashable, Sendable {
+    /// `adb` serial, e.g. `emulator-5554`; the identity that survives a restart.
+    public let serial: String
+    /// Host-facing name shown in the sidebar, e.g. `Pixel 9 Pro (emulator-5554)`.
+    public let name: String
+    /// The address the device reached this Mac from.
+    public let address: String
+
+    public init(serial: String, name: String, address: String) {
+        self.serial = serial
+        self.name = name
+        self.address = address
+    }
+}
+
+/// Where the engine records which device a flow came from.
+///
+/// Flows are `Sendable` value types and are re-encoded constantly, so the label lives beside
+/// them keyed by id instead of inside the struct. A bounded map keeps a long capture from
+/// growing without limit; the traffic list only reads labels for the recent tail.
+public enum DeviceAttribution {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var labels: [UUID: ConnectedDevice] = [:]
+    nonisolated(unsafe) private static var order: [UUID] = []
+    private static let limit = 50_000
+
+    public static func connectedDevice(id: UUID) -> ConnectedDevice? {
+        lock.lock(); defer { lock.unlock() }
+        return labels[id]
+    }
+
+    public static func record(_ device: ConnectedDevice, for id: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        if labels.updateValue(device, forKey: id) == nil { order.append(id) }
+        if order.count > limit {
+            let excess = order.count - limit
+            for stale in order.prefix(excess) { labels.removeValue(forKey: stale) }
+            order.removeFirst(excess)
+        }
+    }
+
+    public static func forget(id: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        labels.removeValue(forKey: id)
+    }
+
+    public static func reset() {
+        lock.lock(); defer { lock.unlock() }
+        labels.removeAll()
+        order.removeAll()
+    }
+}
