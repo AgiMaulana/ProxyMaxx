@@ -257,11 +257,14 @@ proxymaxx-cli stop
 
 `Scripts/bundle-app.sh` rebuilds and copies the binary into the bundle, so after installing
 the app the same tool runs from `ProxyMaxx.app/Contents/Resources/proxymaxx-cli` without the
-checkout. The app's **ProxyMaxx → Command Line Tool…** menu shows that path with **Copy Path**
-and **Open in Finder**, plus two buttons: **Open in Terminal** starts a window that can run
-`proxymaxx-cli` without touching your profile, and **Export Permanently** adds the folder to
-your shell profile so every new terminal finds it. From a shell — for scripts and AI agents,
-which have no window to click:
+checkout. The app's **ProxyMaxx → Command Line Tool…** sheet shows that path with **Copy path**
+and **Reveal**. Select **This session only**, then **Open Terminal**, for a window that can
+run `proxymaxx-cli` without touching your profile. Select **Every terminal**, then **Add to
+PATH**, to update your shell profile directly. The sheet shows the profile's PATH status,
+offers a copyable manual command, and can **Remove from PATH** without deleting unrelated
+profile entries. **Prefer to do it yourself?** starts collapsed; click anywhere on its row
+to show or hide the manual command. Open a new Terminal tab and run `which proxymaxx-cli`
+to verify which copy the shell finds. From a shell, scripts and AI agents can run:
 
 ```sh
 /Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export

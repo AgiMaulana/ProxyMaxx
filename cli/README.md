@@ -47,9 +47,9 @@ profile block described below.
 
 ## Install on PATH
 
-`proxymaxx-cli export` makes the bundled binary callable from any terminal. It is the command
-behind **Export Permanently**, and the one to use from scripts and AI agents, which have no
-window to click:
+`proxymaxx-cli export` makes the bundled binary callable from any terminal. It performs the
+same profile update as **Every terminal → Add to PATH** in the app's Command Line Tool sheet,
+and works from scripts and AI agents without a window to click:
 
 ```sh
 /Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export
@@ -66,6 +66,9 @@ you are already in needs one more step. Press ⌘T for a new tab, or run:
 ```sh
 source ~/.zshrc
 ```
+
+Verify the shell can find the tool with `which proxymaxx-cli`. The path it prints identifies
+the copy that will run. The app's sheet includes a button to copy this verification command.
 
 For a one-off without touching `PATH`, print the line and evaluate it in place:
 

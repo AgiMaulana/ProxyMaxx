@@ -67,165 +67,354 @@ struct BrowserExtensionPanelView: View {
     }
 }
 
-/// The bundled CLI and where to find it.
 struct CommandLineToolPanelView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var launchFailed = false
+    @State private var permanently = true
+    @State private var manualExpanded = false
+    @State private var configured = false
+    @State private var copiedPath = false
     @State private var copiedManualCommand = false
+    @State private var copiedVerification = false
+    @State private var notice: String?
+    @State private var errorMessage: String?
+    @FocusState private var focusedOption: Bool?
 
+    private let shell = ShellPathExport.detectShell()
+    private let verificationCommand = "which proxymaxx-cli"
     private var toolURL: URL { model.commandLineToolURL }
+    private var directory: URL { toolURL.resolvingSymlinksInPath().deletingLastPathComponent() }
+    private var profileURL: URL { ShellPathExport.profileURL(for: shell) }
     private var isInstalled: Bool {
         FileManager.default.isExecutableFile(atPath: toolURL.path)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    location
+                    if isInstalled {
+                        availability
+                        manualSetup
+                        verification
+                    } else {
+                        Label("cli.panel.missing", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let notice {
+                        Text(notice)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(28)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: 660)
             Divider()
-            VStack(alignment: .leading, spacing: 16) {
+            footer
+        }
+        .frame(width: 600)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear(perform: refreshStatus)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshStatus()
+        }
+        .onChange(of: permanently) { _, _ in
+            copiedManualCommand = false
+            notice = nil
+            errorMessage = nil
+        }
+        .onExitCommand { dismiss() }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "terminal")
+                .font(.system(size: 23, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.blue, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("cli.panel.title")
+                        .font(.system(size: 20, weight: .bold))
+                    Spacer(minLength: 0)
+                    Label {
+                        Text(isInstalled
+                             ? (configured ? "cli.panel.status.configured" : "cli.panel.status.notConfigured")
+                             : "cli.panel.status.missing")
+                    } icon: {
+                        Image(systemName: configured && isInstalled ? "checkmark.circle.fill" : "circle.fill")
+                            .font(.system(size: 7))
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(configured && isInstalled ? Color.green : Color.orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background((configured && isInstalled ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+                    .help(L10n.format("cli.panel.status.hint", profileURL.path))
+                    .fixedSize()
+                }
                 Text("cli.panel.intro")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                CompanionPathView(path: toolURL.path)
-                Text("cli.panel.note")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if isInstalled {
-                    pathExportSection
-                } else {
-                    Text("cli.panel.missing")
+            }
+        }
+    }
+
+    private var location: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("cli.panel.location")
+            HStack(spacing: 8) {
+                Text((toolURL.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .help(toolURL.path)
+                    .accessibilityLabel(toolURL.path)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(copiedPath ? "common.copied" : "cli.panel.copyPath") {
+                    copy(toolURL.path)
+                    copiedPath = true
+                }
+                Button("cli.panel.reveal") {
+                    NSWorkspace.shared.activateFileViewerSelecting([toolURL])
+                }
+                .disabled(!FileManager.default.fileExists(atPath: toolURL.path))
+            }
+            .buttonStyle(.bordered)
+            .padding(9)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        }
+    }
+
+    private var availability: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("cli.panel.export.title")
+            option(
+                permanent: false,
+                title: "cli.panel.export.session",
+                hint: L10n.string("cli.panel.export.sessionHint")
+            )
+            option(
+                permanent: true,
+                title: "cli.panel.export.permanent",
+                hint: L10n.format("cli.panel.export.permanentHint", (profileURL.path as NSString).abbreviatingWithTildeInPath)
+            )
+            Text(L10n.format("cli.panel.shell", shell.rawValue))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func option(permanent: Bool, title: LocalizedStringKey, hint: String) -> some View {
+        let selected = permanently == permanent
+        return Button {
+            permanently = permanent
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .font(.system(size: 14))
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(title).font(.system(size: 14, weight: .semibold))
+                        if permanent {
+                            Text("cli.panel.recommended")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        }
+                    }
+                    Text(hint)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(18)
+            .padding(16)
+            .background(selected ? Color.accentColor.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 1.5 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
-        .frame(width: 640)
-        .onExitCommand { dismiss() }
+        .buttonStyle(.plain)
+        .focused($focusedOption, equals: permanent)
+        .overlay {
+            if focusedOption == permanent {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .padding(-3)
+            }
+        }
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(Text(selected ? "cli.panel.selected" : "cli.panel.notSelected"))
+        .accessibilityHint(hint)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// The `export` half of the panel: two buttons and the command they stand in for.
-    ///
-    /// The two buttons are separate because they answer different questions — "use it now,
-    /// here" versus "use it from now on, everywhere" — and a terminal the user already has
-    /// open cannot be reached from here anyway, so a terminal they can copy the command into
-    /// has to stay on screen. A terminal opened by the first button also starts a shell after
-    /// the export, because Terminal closes a window as soon as its command exits.
-    private var pathExportSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("cli.panel.export.title").font(.headline)
-            Text("cli.panel.export.intro")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Button("cli.panel.export.session") {
-                        openInTerminal(.thisSessionOnly)
-                    }
-                    Spacer()
-                }
-                Text("cli.panel.export.sessionHint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Button("cli.panel.export.permanent") {
-                        openInTerminal(.permanently)
-                    }
-                    Spacer()
-                }
-                Text("cli.panel.export.permanentHint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // The fallback for a machine where neither button can reach Terminal: the bare
-            // command, copyable in one click. It writes the same block the second button
-            // does, so it is the permanent form rather than a third meaning.
-            Text("cli.panel.export.manualTitle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
+    private var manualSetup: some View {
+        DisclosureGroup(isExpanded: $manualExpanded) {
             HStack(spacing: 8) {
                 Text(manualCommand)
                     .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(8)
+                    .help(manualCommand)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                Button(copiedManualCommand ? L10n.string("common.copied") : L10n.string("companion.copyCommand")) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(manualCommand, forType: .string)
+                Button(copiedManualCommand ? "common.copied" : "cli.panel.copyCommand") {
+                    copy(manualCommand)
                     copiedManualCommand = true
                 }
+                .buttonStyle(.bordered)
             }
-
-            if launchFailed {
-                Text("cli.panel.export.failed")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .padding(9)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+            .padding(.top, 10)
+        } label: {
+            Text("cli.panel.export.manualTitle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { manualExpanded.toggle() }
         }
     }
 
-    /// The command shown under the buttons: bare `export`, matching what the second button
-    /// runs, so a user who copies it gets the same result without having to decode a flag.
+    private var verification: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("cli.panel.verify.title").font(.headline)
+            Text(permanently ? "cli.panel.verify.permanent" : "cli.panel.verify.session")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            HStack {
+                Text(verificationCommand)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.green)
+                    .textSelection(.enabled)
+                Spacer()
+                Button(copiedVerification ? "common.copied" : "common.copy") {
+                    copy(verificationCommand)
+                    copiedVerification = true
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text(copiedVerification ? "common.copied" : "cli.panel.verify.copy"))
+            }
+            .padding(.top, 6)
+        }
+        .padding(16)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Button("cli.panel.remove") { removeFromPath() }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("common.done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button(permanently ? "cli.panel.add" : "cli.panel.openTerminal") {
+                if permanently {
+                    addToPath()
+                } else {
+                    openInTerminal()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!isInstalled)
+        }
+        .controlSize(.large)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 16)
+    }
+
+    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.secondary)
+    }
+
     private var manualCommand: String {
-        "\(quoted(toolURL.path)) export"
+        if permanently {
+            return "\(ShellPathExport.shellQuoted(toolURL.path, shell: shell)) export"
+        }
+        return ShellPathExport.exportLine(for: directory.path, shell: shell)
     }
 
-    private func quoted(_ path: String) -> String {
-        guard path.contains(" ") || path.contains("'") else { return path }
-        return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
-    /// Open a window that does what `intent` asks. `launchFailed` drives the red line under
-    /// the buttons; the copyable command below them is the fallback either way.
-    private func openInTerminal(_ intent: TerminalLauncher.Intent) {
-        let script = TerminalLauncher.setupScript(
-            directory: toolURL.deletingLastPathComponent().path,
-            intent: intent
-        )
-        launchFailed = false
-        // The window belongs to Terminal, so the app steps aside instead of competing for
-        // focus with the thing the user just asked to see.
+    private func refreshStatus() {
+        configured = ShellPathExport.isConfigured(directory: directory.path, shell: shell, profileURL: profileURL)
+    }
+
+    private func addToPath() {
+        errorMessage = nil
+        notice = nil
+        do {
+            _ = try ShellPathExport.install(directory: directory, shell: shell, profileURL: profileURL)
+            refreshStatus()
+            notice = L10n.format("cli.panel.added", (profileURL.path as NSString).abbreviatingWithTildeInPath)
+        } catch {
+            errorMessage = L10n.format("cli.panel.updateFailed", error.localizedDescription)
+            manualExpanded = true
+        }
+    }
+
+    private func removeFromPath() {
+        errorMessage = nil
+        notice = nil
+        do {
+            let removed = try ShellPathExport.remove(profileURL: profileURL)
+            refreshStatus()
+            notice = L10n.string(removed ? "cli.panel.removed" : "cli.panel.noManagedBlock")
+        } catch {
+            errorMessage = L10n.format("cli.panel.updateFailed", error.localizedDescription)
+        }
+    }
+
+    private func openInTerminal() {
+        errorMessage = nil
+        notice = nil
+        let script = TerminalLauncher.setupScript(directory: directory.path, intent: .thisSessionOnly)
         NSApp.hide(nil)
         TerminalLauncher.open(script: script) { result in
             if case .failure(let error) = result {
-                launchFailed = true
-                // The alert is the only place the reason survives: the red line under the
-                // button says what happened, and this says why, which a bug report needs.
-                let alert = NSAlert()
-                alert.messageText = L10n.string("cli.panel.export.failed")
-                alert.informativeText = error.description
-                alert.alertStyle = .warning
-                alert.runModal()
+                errorMessage = L10n.string("cli.panel.export.failed") + "\n" + error.description
+                manualExpanded = true
+                NSApp.unhide(nil)
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("cli.panel.title").font(.title2).bold()
-            Spacer()
-            Button("common.done") { dismiss() }.keyboardShortcut(.defaultAction)
-        }
-        .padding(16)
     }
 }
 
