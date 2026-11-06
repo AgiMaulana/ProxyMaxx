@@ -307,6 +307,54 @@ final class AppModel: ObservableObject {
         engine?.mapLocalRules = ruleStore.effectiveMapLocalRules
     }
 
+    func mapFlowToMapLocal(_ flow: Flow) {
+        let filePath = MapLocalView.generateDefaultFile()
+
+        // Write the body decoded so the file is editable; the Content-Encoding header
+        // then describes bytes that are no longer there, so it is dropped with it.
+        let decodedBody = flow.response.flatMap { ContentDecoding.decode($0.body, encoding: $0.contentEncoding) }
+
+        var content = "HTTP/1.1 \(flow.statusCode ?? 200) OK\r\n"
+        if let response = flow.response {
+            for header in response.headers.entries {
+                if decodedBody != nil, header.name.caseInsensitiveCompare("Content-Encoding") == .orderedSame { continue }
+                content += "\(header.name): \(header.value)\r\n"
+            }
+        }
+        content += "\r\n"
+        let body = decodedBody ?? flow.response?.body ?? Data()
+        if !body.isEmpty {
+            if let prettyJSON = BodyFormatting.prettyJSON(body) {
+                content += prettyJSON
+            } else if let bodyStr = String(data: body, encoding: .utf8) {
+                content += bodyStr
+            }
+        }
+        
+        try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
+        
+        let parsedURL = URL(string: flow.url)
+        let cleanedURL = flow.url
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+        
+        let path = parsedURL?.path ?? ""
+        let host = parsedURL?.host ?? ""
+        let ruleName = path.isEmpty || path == "/" ? host : path
+        
+        let rule = MapLocalRule(
+            name: ruleName.isEmpty ? cleanedURL : ruleName,
+            url: cleanedURL,
+            matchStyle: .wildcard,
+            includePath: true,
+            destination: .file(filePath)
+        )
+        
+        ruleStore.addMapLocalRule(rule)
+        applyRules()
+        showMapLocalWindow = true
+    }
+
     // MARK: - System proxy
 
     func setSystemProxy(_ enabled: Bool) {
