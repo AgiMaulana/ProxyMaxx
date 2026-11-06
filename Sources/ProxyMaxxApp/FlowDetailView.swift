@@ -32,8 +32,8 @@ private enum BodyMode: CaseIterable {
 
 /// Request/response inspector for a single captured flow.
 struct FlowDetailView: View {
+    @EnvironmentObject var model: AppModel
     let flow: Flow
-
     @State private var side: Side = .response
     @State private var bodyMode: BodyMode = .pretty
     /// Drives the brief "Copied" state so the button confirms the pasteboard write.
@@ -61,6 +61,10 @@ struct FlowDetailView: View {
             }
         }
         .contextMenu {
+            Button("main.mapResponse") {
+                model.mapFlowToMapLocal(flow)
+            }
+            Divider()
             Button("main.copyURL") { Self.copyToPasteboard(flow.url) }
             Menu("main.export") {
                 Button("main.exportCurl") { Self.copyToPasteboard(flow.curlCommand) }
