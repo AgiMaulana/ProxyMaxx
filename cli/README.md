@@ -41,7 +41,41 @@ inside the bundle:
 
 The source checkout is not needed at that point: the bundled binary is the same one the build
 just produced. In the app, **ProxyMaxx → Command Line Tool…** shows that path with **Copy
-Path** and **Open in Finder**.
+Path**, **Open in Finder**, and two buttons: **Open in Terminal** opens a window that can run
+the tool right away without changing your profile, and **Export Permanently** writes the
+profile block described below.
+
+## Install on PATH
+
+`proxymaxx-cli export` makes the bundled binary callable from any terminal. It is the command
+behind **Export Permanently**, and the one to use from scripts and AI agents, which have no
+window to click:
+
+```sh
+/Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export
+```
+
+It adds the folder that holds the binary — `Contents/Resources`, not the binary itself — to
+`PATH`. The command appends a marked block to the profile for your shell (`~/.zshrc`,
+`~/.bash_profile`, or `~/.config/fish/config.fish`), so every new terminal finds the tool.
+Repeat runs rewrite the block instead of duplicating it, and `--remove` deletes it.
+
+A child process cannot change the environment of the shell that launched it, so the terminal
+you are already in needs one more step. Press ⌘T for a new tab, or run:
+
+```sh
+source ~/.zshrc
+```
+
+For a one-off without touching `PATH`, print the line and evaluate it in place:
+
+```sh
+eval "$(/Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export --print)"
+```
+
+Flags: `--print` prints the export line and writes nothing, `--remove` deletes the marked
+block, `--shell zsh|bash|fish` overrides detection from `$SHELL`, and `--profile PATH` writes
+to a specific file.
 
 ## Commands
 
@@ -58,6 +92,7 @@ proxymaxx-cli proxy on | off | status
 proxymaxx-cli proxy-host
 proxymaxx-cli maplocal on | off
 proxymaxx-cli clear-session
+proxymaxx-cli export [--print] [--shell zsh|bash|fish] [--profile PATH] [--remove]
 proxymaxx-cli paths
 ```
 
@@ -184,8 +219,9 @@ remove it explicitly first. CLI export refuses an existing output path.
 Format 1 accepts ordinary stored/deflated ZIPs, not encrypted, split or ZIP64 archives.
 Limits are 10,000 entries, 512 MiB per response, 1 GiB total, and 4 MiB for the manifest.
 
-The top-level JSON `import` and `export` commands below remain configuration transfers.
-They contain local paths and are not portable response bundles.
+The top-level JSON `import` and `export --output` commands below remain configuration transfers.
+They contain local paths and are not portable response bundles. `export` without `--output`
+is the PATH helper described above.
 
 `rules map-local create` and `update` take the response source and its shape:
 

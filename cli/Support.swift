@@ -47,7 +47,7 @@ struct Arguments {
     private static let booleanOptions: Set<String> = [
         "activate", "detach", "errors-only", "fail-on-match", "follow", "force",
         "h", "help", "host-only", "include-physical", "magisk", "no-magisk",
-        "pem", "pinned", "saved", "text",
+        "pem", "pinned", "print", "remove", "saved", "text",
     ]
 
     /// The option name behind a token, or nil when the token is a positional value.
@@ -160,8 +160,16 @@ enum Help {
       proxymaxx-cli rule move      --id UUID --by (-1|1 ...)
       proxymaxx-cli rule clear
 
+      proxymaxx-cli export [--print] [--shell zsh|bash|fish] [--profile PATH]
+                           [--remove]
+                           Add this binary's folder to PATH so `proxymaxx-cli` runs
+                           from any terminal. Appends a marked block to the shell
+                           profile; open a new terminal, or run
+                           `source ~/.zshrc` in this one. --print prints the export
+                           line and writes nothing; --remove deletes the block.
       proxymaxx-cli export --output PATH [--mode all|enabledRules]
       proxymaxx-cli import --input  PATH [--mode append|override]
+                           Transfer the map local rule configuration as JSON.
       proxymaxx-cli cert status | cert install | cert uninstall | cert export --out PATH
 
       proxymaxx-cli android devices

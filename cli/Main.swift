@@ -50,7 +50,12 @@ struct ProxyMaxxCLI {
             case "clear-session":
                 try await ToolCommand.clearSession()
             case "export":
-                try TransferCommand.export(arguments.after(command))
+                let exportArguments = arguments.after(command)
+                if isRuleExport(exportArguments) {
+                    try TransferCommand.export(exportArguments)
+                } else {
+                    try PathExportCommand.run(exportArguments)
+                }
             case "import":
                 try TransferCommand.import(arguments.after(command))
             case "mcp":
@@ -74,6 +79,12 @@ struct ProxyMaxxCLI {
         } catch {
             fail(error.localizedDescription)
         }
+    }
+
+    /// `export` is two things: a rule-file transfer when any transfer flag is present, and
+    /// the PATH helper when called bare. The issue-friendly bare form is the documented one.
+    private static func isRuleExport(_ arguments: Arguments) -> Bool {
+        ["output", "o", "mode", "m", "rules"].contains { arguments.value($0) != nil }
     }
 
     private static func printPaths() {
