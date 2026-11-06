@@ -663,12 +663,8 @@ struct MapLocalEditorView: View {
                         .font(.caption)
                     }
 
-                    TextEditor(text: $responseContent)
-                        .disabled(!canEditResponse)
-                        .font(.system(.body, design: .monospaced))
+                    SearchableTextEditor(text: $responseContent, isEditable: canEditResponse)
                         .frame(minHeight: 110, maxHeight: .infinity)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
                         .background(Color(NSColor.textBackgroundColor))
                         .cornerRadius(6)
                         .overlay(
