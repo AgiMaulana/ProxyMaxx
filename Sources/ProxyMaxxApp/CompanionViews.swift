@@ -71,8 +71,21 @@ struct BrowserExtensionPanelView: View {
 struct CommandLineToolPanelView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @State private var copiedCommand: String?
 
     private var toolURL: URL { model.commandLineToolURL }
+    private var isInstalled: Bool {
+        FileManager.default.isExecutableFile(atPath: toolURL.path)
+    }
+    private var exportCommand: String {
+        "\(quoted(toolURL.path)) export"
+    }
+    /// The same change, applied to the terminal the user is sitting in. A new terminal
+    /// would read the profile block; this one has to be told now. Only zsh users get a
+    /// one-liner here, because the CLI already names the right file for the others.
+    private var applyCommand: String? {
+        ShellPathExport.detectShell() == .zsh ? "source ~/.zshrc" : nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -88,7 +101,9 @@ struct CommandLineToolPanelView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if !FileManager.default.isExecutableFile(atPath: toolURL.path) {
+                if isInstalled {
+                    pathExportSection
+                } else {
                     Text("cli.panel.missing")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -99,6 +114,52 @@ struct CommandLineToolPanelView: View {
         }
         .frame(width: 640)
         .onExitCommand { dismiss() }
+    }
+
+    /// The `export` half of the panel: what the command does, and how to apply it to the
+    /// terminal already open. The CLI cannot edit its parent shell's environment, so the
+    /// profile block is what makes the change last and `source`/`eval` is what makes it
+    /// immediate.
+    private var pathExportSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("cli.panel.export.title").font(.headline)
+            Text("cli.panel.export.intro")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            commandRow(exportCommand)
+
+            if let applyCommand {
+                Text("cli.panel.export.applyTitle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                commandRow(applyCommand)
+            }
+        }
+    }
+
+    private func commandRow(_ command: String) -> some View {
+        HStack(spacing: 8) {
+            Text(command)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+            Button(copiedCommand == command ? L10n.string("common.copied") : L10n.string("companion.copyCommand")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command, forType: .string)
+                copiedCommand = command
+            }
+        }
+    }
+
+    private func quoted(_ path: String) -> String {
+        guard path.contains(" ") else { return path }
+        return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private var header: some View {

@@ -356,8 +356,12 @@
 "cli.panel.title" = "Command Line Tool";
 "cli.panel.intro" = "The command line tool is bundled with the app. Run it from Terminal, or link it into your PATH.";
 "cli.panel.note" = "It drives the same engine and reads the same session as this window.";
+"cli.panel.export.title" = "Add to PATH";
+"cli.panel.export.intro" = "Run this once in Terminal to call proxymaxx-cli from any shell. It detects your shell, appends a marked block to its profile (~/.zshrc, ~/.bash_profile, or ~/.config/fish/config.fish), and leaves new terminals ready.";
+"cli.panel.export.applyTitle" = "Already open in a terminal? Apply the change to it:";
 "cli.panel.missing" = "This build did not include the tool. Run Scripts/build-cli.sh, then rebuild the app.";
 "companion.copyPath" = "Copy Path";
+"companion.copyCommand" = "Copy Command";
 "companion.openInFinder" = "Open in Finder";
 
 /* MARK: Errors and notices */

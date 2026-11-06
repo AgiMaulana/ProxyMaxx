@@ -258,7 +258,11 @@ proxymaxx-cli stop
 `Scripts/bundle-app.sh` rebuilds and copies the binary into the bundle, so after installing
 the app the same tool runs from `ProxyMaxx.app/Contents/Resources/proxymaxx-cli` without the
 checkout. The app's **ProxyMaxx → Command Line Tool…** menu shows that path with **Copy Path**
-and **Open in Finder**.
+and **Open in Finder**, plus the `export` command that adds the tool's folder to `PATH`:
+
+```sh
+/Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export
+```
 
 See [cli/README.md](cli/README.md) for the full surface.
 
