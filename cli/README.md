@@ -167,6 +167,7 @@ The short surface, for typing by hand:
 proxymaxx-cli rule list [--rules PATH] [--text]
 proxymaxx-cli rule add    --url PATTERN --file PATH [--method M] [--name NAME]
                           [--style contains|wildcard|regex|exact] [--host-only] [--delay SECONDS]
+proxymaxx-cli rule template [--out PATH] [--force] [--print]
 proxymaxx-cli rule remove  (--id UUID | --name NAME | --url PATTERN)
 proxymaxx-cli rule enable  (--id UUID | --name NAME | --url PATTERN)
 proxymaxx-cli rule disable (--id UUID | --name NAME | --url PATTERN)
@@ -316,11 +317,14 @@ proxymaxx-cli serve --detach --port 9090
 proxymaxx-cli flows --host api.example.com --method POST --limit 20
 proxymaxx-cli flows --filter '/v1/user/profile' --flow-mode full
 
-# 3. Save the stub body, then map the URL to it. The engine reloads without a restart.
-cat > /tmp/stub-profile.json <<'EOF'
-{ "id": 42, "name": "Stubbed Alice", "email": "stub@example.com" }
-EOF
+# 3. Create a valid override response, then map the URL to it. The engine reloads
+#    without a restart. The template is a full HTTP/1.1 message: status and headers,
+#    a blank line, then the JSON body. Edit the body below that blank line.
+proxymaxx-cli rule template --out /tmp/stub-profile.json
+#    -> {"bytes":103,"path":"/tmp/stub-profile.json","template":"http-response"}
 proxymaxx-cli rule add --url 'api.example.com/v1/user/profile' --file /tmp/stub-profile.json
+#    Prefer to build the file yourself? Print the same bytes and redirect:
+#    proxymaxx-cli rule template --print > /tmp/my-stub.json
 
 # 4. Repeat the request. The flow reports mappedLocally=true and the rule name.
 proxymaxx-cli flows --filter '/v1/user/profile'

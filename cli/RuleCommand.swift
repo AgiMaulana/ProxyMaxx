@@ -23,7 +23,7 @@ enum RuleCommand {
 
     static func run(_ arguments: Arguments) async throws {
         guard let action = arguments.positional.first else {
-            throw CLIError("rule needs an action (list|add|remove|enable|disable|move|clear). Run `proxymaxx-cli --help`.")
+            throw CLIError("rule needs an action (list|add|template|remove|enable|disable|move|clear). Run `proxymaxx-cli --help`.")
         }
         let body = arguments.after(action)
         switch action {
@@ -31,6 +31,8 @@ enum RuleCommand {
             try await list(body)
         case "add":
             try await add(body)
+        case "template":
+            try template(body)
         case "remove":
             try await remove(body)
         case "enable":
@@ -42,7 +44,7 @@ enum RuleCommand {
         case "clear":
             try await clear(body)
         default:
-            throw CLIError("unknown rule action '\(action)'", hint: "list|add|remove|enable|disable|move|clear")
+            throw CLIError("unknown rule action '\(action)'", hint: "list|add|template|remove|enable|disable|move|clear")
         }
     }
 
@@ -216,6 +218,53 @@ enum RuleCommand {
         let data = try JSONEncoder().encode(rule)
         FileHandle.standardOutput.write(Data(data))
         FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+
+    // MARK: - template
+
+    /// `rule template [--out PATH] [--force] [--print]` — write the starter response the
+    /// app's **Insert Default Template** button inserts, so an agent can create a valid
+    /// override without inventing HTTP framing.
+    ///
+    /// No `--out` chooses a fresh `default_message_<8>.json` under the app's map-local
+    /// directory, exactly like the editor. The destination path is printed as one JSON
+    /// object on stdout, ready to feed into `rule add --file`.
+    private static func template(_ arguments: Arguments) throws {
+        let out = arguments.value("out")
+        if arguments.has("print") || out == "-" {
+            guard out == nil || out == "-" else {
+                throw CLIError("--print writes no file, so --out must be omitted or '-'")
+            }
+            FileHandle.standardOutput.write(MapLocalResponseTemplate.data)
+            return
+        }
+
+        let destination: URL?
+        if let out {
+            guard !out.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw CLIError("--out needs a path, or - for standard output")
+            }
+            destination = URL(fileURLWithPath: (out as NSString).expandingTildeInPath).standardizedFileURL
+        } else {
+            destination = nil
+        }
+
+        let written: URL
+        do {
+            written = try MapLocalResponseTemplate.write(to: destination, overwrite: arguments.has("force"))
+        } catch {
+            throw CLIError(error.localizedDescription)
+        }
+
+        let metadata: [String: Any] = [
+            "bytes": MapLocalResponseTemplate.data.count,
+            "path": written.path,
+            "template": "http-response",
+        ]
+        let data = try JSONSerialization.data(withJSONObject: metadata, options: [.sortedKeys])
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+        note("wrote default HTTP response template to \(written.path)")
     }
 
     // MARK: - remove / enable / disable / move / clear

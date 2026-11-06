@@ -154,6 +154,12 @@ enum Help {
       proxymaxx-cli rule add       --url PATTERN --file PATH [--method M] [--name NAME]
                                   [--style contains|wildcard|regex|exact] [--host-only]
                                   [--delay SECONDS]
+      proxymaxx-cli rule template  [--out PATH] [--force] [--print]
+                           Write a starter HTTP/1.1 response file for Local Override.
+                           With no --out, a fresh default_message_<8>.json under the
+                           app's map-local directory; stdout is {"path":…,"bytes":…}.
+                           --print (or --out -) prints the template itself. An existing
+                           path is refused unless --force, so edits are never lost.
       proxymaxx-cli rule remove    (--id UUID | --name NAME | --url PATTERN)
       proxymaxx-cli rule enable    (--id UUID | --name NAME | --url PATTERN)
       proxymaxx-cli rule disable   (--id UUID | --name NAME | --url PATTERN)

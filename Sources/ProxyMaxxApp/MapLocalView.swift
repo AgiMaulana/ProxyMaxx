@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import Branding
 import FlowKit
 import RuleKit
 import UniformTypeIdentifiers
@@ -477,9 +476,8 @@ struct MapLocalView: View {
     }
 
     public static func generateDefaultFile() -> String {
-        let directory = Brand.supportDirectory.appendingPathComponent("map-local", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory.appendingPathComponent("default_message_\(UUID().uuidString.prefix(8)).json").path
+        try? FileManager.default.createDirectory(at: MapLocalResponseTemplate.directory, withIntermediateDirectories: true)
+        return MapLocalResponseTemplate.defaultFileURL().path
     }
 }
 
@@ -503,18 +501,8 @@ struct MapLocalEditorView: View {
         let exists = FileManager.default.fileExists(atPath: expanded)
         _loadedResponse = State(initialValue: loaded)
         _canEditResponse = State(initialValue: loaded != nil || !exists)
-        _responseContent = State(initialValue: loaded ?? (exists ? "" : Self.responseTemplate))
+        _responseContent = State(initialValue: loaded ?? (exists ? "" : MapLocalResponseTemplate.message))
     }
-
-    private static let responseTemplate = """
-    HTTP/1.1 200 OK
-    Content-Type: application/json; charset=utf-8
-
-    {
-      "message": "success",
-      "data": {}
-    }
-    """
 
     private let isNew: Bool
     private let onSave: (MapLocalRule) -> Void
@@ -670,7 +658,7 @@ struct MapLocalEditorView: View {
                         Spacer()
                         Button("mapLocal.insertTemplate") {
                             canEditResponse = true
-                            responseContent = Self.responseTemplate
+                            responseContent = MapLocalResponseTemplate.message
                         }
                         .font(.caption)
                     }
