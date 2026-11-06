@@ -107,6 +107,56 @@ public enum AndroidToolchain {
         isEmulator ? "10.0.2.2" : (lanIPv4Address() ?? "10.0.2.2")
     }
 
+    /// True for the address an Android emulator's network reaches this Mac from.
+    public static func isEmulatorAddress(_ peer: String) -> Bool {
+        peer == "10.0.2.2"
+    }
+
+    /// The emulator console port `adb devices -l` lists as this serial, or nil when the serial
+    /// is not an emulator or is out of range.
+    ///
+    /// An emulator's serial is its console port (`emulator-5554`); odd serials seen in the
+    /// wild are rounded down to the even console port they belong to.
+    public static func consolePort(forSerial serial: String) -> Int? {
+        guard serial.hasPrefix("emulator-"),
+              let port = Int(serial.dropFirst("emulator-".count)),
+              (1...65_535).contains(port) else { return nil }
+        return port % 2 == 0 ? port : port - 1
+    }
+
+    /// Whether something on this Mac accepts a connection on `127.0.0.1:port` right now.
+    ///
+    /// `adb devices -l` keeps listing an emulator after its process is gone, so the listing
+    /// alone cannot tell a running emulator from a stale entry. The console port is bound only
+    /// while the emulator runs, so a refused connection there is the evidence that it stopped.
+    public static func isListeningOnLoopback(port: Int, timeoutMilliseconds: Int32 = 200) -> Bool {
+        var hints = addrinfo(
+            ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_STREAM, ai_protocol: 0,
+            ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil
+        )
+        var info: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo("127.0.0.1", String(port), &hints, &info) == 0, let first = info else { return false }
+        defer { freeaddrinfo(info) }
+        let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        // Without a send timeout a connect through a stale firewall rule can hang.
+        var timeout = timeval(tv_sec: 0, tv_usec: timeoutMilliseconds * 1000)
+        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        return connect(descriptor, first.pointee.ai_addr, first.pointee.ai_addrlen) == 0
+    }
+
+    /// The connected devices whose emulator is still running.
+    ///
+    /// `devices()` reports what adb remembers; `runningDevices()` reports what is alive,
+    /// which is what the traffic sidebar should name as a connected emulator.
+    public static func runningDevices() -> [AndroidDevice] {
+        devices().filter { device in
+            guard let console = consolePort(forSerial: device.serial) else { return true }
+            return isListeningOnLoopback(port: console)
+        }
+    }
+
     /// The Mac's LAN address, for physical devices.
     public static func lanIPv4Address() -> String? {
         for interface in ["en0", "en1"] {

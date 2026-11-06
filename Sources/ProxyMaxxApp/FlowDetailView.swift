@@ -157,17 +157,31 @@ struct FlowDetailView: View {
     private var clientSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             sectionTitle("common.client")
-            if let app = flow.clientApp {
+            if let device = flow.connectedDevice {
+                Label(device.name, systemImage: "candybarphone")
+                    .font(.callout)
+                    .textSelection(.enabled)
+                keyValueTable([("client.deviceSerial", device.serial), ("client.address", device.address)])
+            } else if let app = flow.clientApp {
                 ClientAppLabel(app: app)
                     .font(.callout)
                     .textSelection(.enabled)
                 keyValueTable(clientMetadata(for: app))
+            } else if flow.origin == .remoteDevice {
+                Text("client.remoteDevice").font(.callout)
+                Text("client.remoteDeviceUnattributed").font(.caption).foregroundStyle(.secondary)
+                if let address = flow.clientAddress {
+                    keyValueTable([("client.address", address)])
+                }
             } else {
                 Text("client.unknown")
                     .font(.callout)
                 Text("client.unavailable")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let address = flow.clientAddress {
+                    keyValueTable([("client.address", address)])
+                }
             }
         }
     }

@@ -60,6 +60,14 @@ final class AppModel: ObservableObject {
     @Published var androidIncludePhysical = false
     @Published var androidSerial: String?
     @Published private(set) var androidDevices: [AndroidDevice] = []
+    /// Devices whose emulator is still running, as the traffic sidebar lists them. Refreshed
+    /// while the proxy runs so an emulator that starts or stops shows up without a click.
+    @Published private(set) var connectedDevices: [AndroidDevice] = []
+    private var deviceMonitorTask: Task<Void, Never>?
+    /// Peer addresses already resolved to a device, so a busy device does not spawn one
+    /// `adb` call per connection. Cleared whenever the device list changes.
+    nonisolated(unsafe) private static var deviceByAddress: [String: ConnectedDevice] = [:]
+    nonisolated private static let deviceCacheLock = NSLock()
     @Published private(set) var androidBusy = false
     @Published private(set) var androidLog: [String] = []
     /// The last Android setup failure. Shown inside the guide, not as an app alert: the
@@ -260,6 +268,7 @@ final class AppModel: ObservableObject {
             self.externalOwner = nil
             self.flowStore.setCapturing(true)
             self.publishOwnershipAndBeginConsuming(engine: engine)
+            self.startDeviceMonitor()
             self.syncAttachMode()
             self.log("Proxy listening on 127.0.0.1:\(self.port)")
             if let boundSocksPort = engine.boundSocksPort {
@@ -277,6 +286,7 @@ final class AppModel: ObservableObject {
         engine = nil
         isRunning = false
         boundSocksPort = nil
+        stopDeviceMonitor()
         flowStore.setCapturing(false)
         flowSpool.clear()
         retractOwnership()
@@ -611,6 +621,110 @@ final class AppModel: ObservableObject {
 
     var androidSelectedDevice: AndroidDevice? {
         androidDevices.first { $0.serial == androidSerial }
+    }
+
+    // MARK: - Connected devices
+
+    /// Refresh the device list now and keep refreshing it while the proxy runs.
+    ///
+    /// The list is read off the main actor: `adb devices -l` is a process launch, and the
+    /// app's window redraws while capture is on.
+    func startDeviceMonitor() {
+        guard deviceMonitorTask == nil else { return }
+        deviceMonitorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.refreshConnectedDevices()
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
+        refreshConnectedDevices()
+    }
+
+    func stopDeviceMonitor() {
+        deviceMonitorTask?.cancel()
+        deviceMonitorTask = nil
+        connectedDevices = []
+        Self.resetDeviceCache()
+    }
+
+    private func refreshConnectedDevices() {
+        guard deviceMonitorTask != nil || isRunning else { return }
+        Task.detached(priority: .utility) {
+            let devices = AndroidToolchain.runningDevices()
+            await MainActor.run {
+                guard devices != self.connectedDevices else { return }
+                self.connectedDevices = devices
+                Self.resetDeviceCache()
+                self.log("Connected devices: " + (devices.isEmpty ? "none" : devices.map(\.displayName).joined(separator: ", ")))
+                self.labelUnlabelledFlows(devices: devices)
+            }
+        }
+    }
+
+    /// Resolve a peer address to a device. Runs off the main actor, from the engine.
+    ///
+    /// An emulator reaches this Mac as `10.0.2.2`, which every emulator shares, so the first
+    /// running emulator owns that address and stays the owner until it stops. A physical
+    /// device on the same Wi-Fi arrives as the Mac's LAN address, which every device shares
+    /// too; that address is left unlabelled rather than guessed onto one of them, so the
+    /// sidebar never claims a device the flow may not have come from.
+    nonisolated private static func matchDevice(_ peer: String) -> ConnectedDevice? {
+        if Flow.isLoopback(peer) { return nil }
+        deviceCacheLock.lock()
+        let cached = deviceByAddress[peer]
+        deviceCacheLock.unlock()
+        if let cached { return cached }
+
+        guard let device = AndroidToolchain.runningDevices()
+            .first(where: { AndroidToolchain.isEmulatorAddress(peer) && $0.isEmulator })
+        else { return nil }
+        let resolved = ConnectedDevice(serial: device.serial, name: device.displayName, address: peer)
+        deviceCacheLock.lock()
+        deviceByAddress[peer] = resolved
+        deviceCacheLock.unlock()
+        return resolved
+    }
+
+    /// The device that owns loopback-relayed traffic: the first running emulator.
+    ///
+    /// qemu's relay (`netsimd`) reaches this Mac over loopback whatever address the device was
+    /// given, so nothing on the socket names the device. A single running emulator is the only
+    /// owner that connection can have; with none running, the flow stays unlabelled rather than
+    /// being credited to whatever process happens to hold the socket.
+    nonisolated private static func emulatorRelayDevice() -> ConnectedDevice? {
+        deviceCacheLock.lock()
+        let cached = deviceByAddress["loopback"]
+        deviceCacheLock.unlock()
+        if let cached { return cached }
+        guard let emulator = AndroidToolchain.runningDevices().first(where: \.isEmulator) else {
+            return nil
+        }
+        let device = ConnectedDevice(
+            serial: emulator.serial,
+            name: emulator.displayName,
+            address: AndroidToolchain.hostAddress(forEmulator: true)
+        )
+        deviceCacheLock.lock()
+        deviceByAddress["loopback"] = device
+        deviceCacheLock.unlock()
+        return device
+    }
+
+    nonisolated private static func resetDeviceCache() {
+        deviceCacheLock.lock()
+        deviceByAddress.removeAll()
+        deviceCacheLock.unlock()
+    }
+
+    /// Label flows that arrived before their device was known (an emulator started after the
+    /// connection, or `adb` appeared late). A flow keeps its label once it has one.
+    private func labelUnlabelledFlows(devices: [AndroidDevice]) {
+        guard !devices.isEmpty else { return }
+        for flow in flowStore.flows where flow.connectedDevice == nil {
+            guard let address = flow.clientAddress,
+                  let device = Self.matchDevice(Flow.remotePeer(of: address) ?? "") else { continue }
+            DeviceAttribution.record(device, for: flow.id)
+        }
     }
 
     /// The host address the selected device will use, for display in the guide.
@@ -1100,6 +1214,18 @@ final class AppModel: ObservableObject {
     private func handle(_ event: ProxyEvent) {
         switch event {
         case .flow(let flow):
+            let peer = flow.clientAddress.flatMap(Flow.remotePeer(of:))
+            if flow.connectedDevice == nil, flow.clientApp == nil, let peer,
+               let device = Self.matchDevice(peer) {
+                DeviceAttribution.record(device, for: flow.id)
+            }
+            // The emulator's relay is a loopback peer with no device address to match, so the
+            // device is chosen before the flow is stored. Otherwise the relay becomes the
+            // flow's client and the sidebar lists it under `netsimd` instead of the device.
+            if flow.connectedDevice == nil, let peer, Flow.isLoopback(peer),
+               let device = Self.emulatorRelayDevice() {
+                DeviceAttribution.record(device, for: flow.id)
+            }
             flowStore.upsert(flow)
             flowSpool.write(flow)
             sessionLog.append(flow)
