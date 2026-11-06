@@ -704,3 +704,61 @@ final class MapLocalBundleOwnershipTests: XCTestCase {
 }
 
 
+
+final class MapLocalResponseTemplateTests: XCTestCase {
+    private func temporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("maplocal-template-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    func testTemplateIsACompleteJSONResponse() throws {
+        let data = MapLocalResponseTemplate.data
+        XCTAssertTrue(MapLocalResponder.looksLikeHTTPMessage(data), "the template must be served as a message, not a raw body")
+
+        let response = MapLocalResponder.makeResponse(from: data, pathExtension: "json")
+        XCTAssertEqual(response.statusCode, 200)
+        XCTAssertEqual(response.headers["Content-Type"], "application/json; charset=utf-8")
+        XCTAssertEqual(response.headers["Content-Length"], "\(response.body.count)")
+
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        XCTAssertEqual(object["message"] as? String, "success")
+        XCTAssertNotNil(object["data"] as? [String: Any])
+    }
+
+    func testDefaultURLPointsIntoTheMapLocalDirectory() {
+        let directory = URL(fileURLWithPath: "/tmp/map-local")
+        let url = MapLocalResponseTemplate.defaultFileURL(in: directory)
+        XCTAssertEqual(url.deletingLastPathComponent().path, directory.path)
+        XCTAssertTrue(url.lastPathComponent.hasPrefix("default_message_"))
+        XCTAssertEqual(url.pathExtension, "json")
+    }
+
+    func testWriteCreatesMissingParentDirectories() throws {
+        let root = try temporaryDirectory()
+        let destination = root.appendingPathComponent("nested/deeper/stub.json")
+
+        let written = try MapLocalResponseTemplate.write(to: destination)
+
+        XCTAssertEqual(written, destination)
+        XCTAssertEqual(try Data(contentsOf: destination), MapLocalResponseTemplate.data)
+    }
+
+    func testWriteRefusesToReplaceAnEditedResponseUnlessForced() throws {
+        let root = try temporaryDirectory()
+        let destination = root.appendingPathComponent("stub.json")
+        try Data("{\"edited\":true}".utf8).write(to: destination)
+
+        XCTAssertThrowsError(try MapLocalResponseTemplate.write(to: destination)) { error in
+            XCTAssertEqual(
+                error as? MapLocalResponseTemplateError,
+                .fileExists(destination.path)
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), Data("{\"edited\":true}".utf8))
+
+        try MapLocalResponseTemplate.write(to: destination, overwrite: true)
+        XCTAssertEqual(try Data(contentsOf: destination), MapLocalResponseTemplate.data)
+    }
+}
