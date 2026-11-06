@@ -71,20 +71,12 @@ struct BrowserExtensionPanelView: View {
 struct CommandLineToolPanelView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var copiedCommand: String?
+    @State private var launchFailed = false
+    @State private var copiedManualCommand = false
 
     private var toolURL: URL { model.commandLineToolURL }
     private var isInstalled: Bool {
         FileManager.default.isExecutableFile(atPath: toolURL.path)
-    }
-    private var exportCommand: String {
-        "\(quoted(toolURL.path)) export"
-    }
-    /// The same change, applied to the terminal the user is sitting in. A new terminal
-    /// would read the profile block; this one has to be told now. Only zsh users get a
-    /// one-liner here, because the CLI already names the right file for the others.
-    private var applyCommand: String? {
-        ShellPathExport.detectShell() == .zsh ? "source ~/.zshrc" : nil
     }
 
     var body: some View {
@@ -116,50 +108,115 @@ struct CommandLineToolPanelView: View {
         .onExitCommand { dismiss() }
     }
 
-    /// The `export` half of the panel: what the command does, and how to apply it to the
-    /// terminal already open. The CLI cannot edit its parent shell's environment, so the
-    /// profile block is what makes the change last and `source`/`eval` is what makes it
-    /// immediate.
+    /// The `export` half of the panel: two buttons and the command they stand in for.
+    ///
+    /// The two buttons are separate because they answer different questions — "use it now,
+    /// here" versus "use it from now on, everywhere" — and a terminal the user already has
+    /// open cannot be reached from here anyway, so a terminal they can copy the command into
+    /// has to stay on screen. A terminal opened by the first button also starts a shell after
+    /// the export, because Terminal closes a window as soon as its command exits.
     private var pathExportSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("cli.panel.export.title").font(.headline)
             Text("cli.panel.export.intro")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            commandRow(exportCommand)
-
-            if let applyCommand {
-                Text("cli.panel.export.applyTitle")
-                    .font(.callout)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Button("cli.panel.export.session") {
+                        openInTerminal(.thisSessionOnly)
+                    }
+                    Spacer()
+                }
+                Text("cli.panel.export.sessionHint")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                commandRow(applyCommand)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Button("cli.panel.export.permanent") {
+                        openInTerminal(.permanently)
+                    }
+                    Spacer()
+                }
+                Text("cli.panel.export.permanentHint")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // The fallback for a machine where neither button can reach Terminal: the bare
+            // command, copyable in one click. It writes the same block the second button
+            // does, so it is the permanent form rather than a third meaning.
+            Text("cli.panel.export.manualTitle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Text(manualCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                Button(copiedManualCommand ? L10n.string("common.copied") : L10n.string("companion.copyCommand")) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(manualCommand, forType: .string)
+                    copiedManualCommand = true
+                }
+            }
+
+            if launchFailed {
+                Text("cli.panel.export.failed")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func commandRow(_ command: String) -> some View {
-        HStack(spacing: 8) {
-            Text(command)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-            Button(copiedCommand == command ? L10n.string("common.copied") : L10n.string("companion.copyCommand")) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(command, forType: .string)
-                copiedCommand = command
-            }
-        }
+    /// The command shown under the buttons: bare `export`, matching what the second button
+    /// runs, so a user who copies it gets the same result without having to decode a flag.
+    private var manualCommand: String {
+        "\(quoted(toolURL.path)) export"
     }
 
     private func quoted(_ path: String) -> String {
-        guard path.contains(" ") else { return path }
+        guard path.contains(" ") || path.contains("'") else { return path }
         return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Open a window that does what `intent` asks. `launchFailed` drives the red line under
+    /// the buttons; the copyable command below them is the fallback either way.
+    private func openInTerminal(_ intent: TerminalLauncher.Intent) {
+        let script = TerminalLauncher.setupScript(
+            directory: toolURL.deletingLastPathComponent().path,
+            intent: intent
+        )
+        launchFailed = false
+        // The window belongs to Terminal, so the app steps aside instead of competing for
+        // focus with the thing the user just asked to see.
+        NSApp.hide(nil)
+        TerminalLauncher.open(script: script) { result in
+            if case .failure(let error) = result {
+                launchFailed = true
+                // The alert is the only place the reason survives: the red line under the
+                // button says what happened, and this says why, which a bug report needs.
+                let alert = NSAlert()
+                alert.messageText = L10n.string("cli.panel.export.failed")
+                alert.informativeText = error.description
+                alert.alertStyle = .warning
+                alert.runModal()
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     private var header: some View {

@@ -41,11 +41,15 @@ inside the bundle:
 
 The source checkout is not needed at that point: the bundled binary is the same one the build
 just produced. In the app, **ProxyMaxx → Command Line Tool…** shows that path with **Copy
-Path**, **Open in Finder**, and the `export` command below.
+Path**, **Open in Finder**, and two buttons: **Open in Terminal** opens a window that can run
+the tool right away without changing your profile, and **Export Permanently** writes the
+profile block described below.
 
 ## Install on PATH
 
-`proxymaxx-cli export` makes the bundled binary callable from any terminal:
+`proxymaxx-cli export` makes the bundled binary callable from any terminal. It is the command
+behind **Export Permanently**, and the one to use from scripts and AI agents, which have no
+window to click:
 
 ```sh
 /Applications/ProxyMaxx.app/Contents/Resources/proxymaxx-cli export

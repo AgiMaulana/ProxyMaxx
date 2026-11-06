@@ -357,8 +357,13 @@
 "cli.panel.intro" = "The command line tool is bundled with the app. Run it from Terminal, or link it into your PATH.";
 "cli.panel.note" = "It drives the same engine and reads the same session as this window.";
 "cli.panel.export.title" = "Add to PATH";
-"cli.panel.export.intro" = "Run this once in Terminal to call proxymaxx-cli from any shell. It detects your shell, appends a marked block to its profile (~/.zshrc, ~/.bash_profile, or ~/.config/fish/config.fish), and leaves new terminals ready.";
-"cli.panel.export.applyTitle" = "Already open in a terminal? Apply the change to it:";
+"cli.panel.export.intro" = "proxymaxx-cli lives inside the app, so a shell cannot find it by name yet. Pick how far the change should reach.";
+"cli.panel.export.session" = "Open in Terminal";
+"cli.panel.export.sessionHint" = "A new Terminal window with proxymaxx-cli ready to use. Nothing is written to your profile, so other terminals and later sessions keep their current PATH.";
+"cli.panel.export.permanent" = "Export Permanently";
+"cli.panel.export.permanentHint" = "Adds proxymaxx-cli to your shell profile (~/.zshrc, ~/.bash_profile, or ~/.config/fish/config.fish) so every new terminal finds it. Running it again rewrites the block instead of adding a second one.";
+"cli.panel.export.manualTitle" = "If the buttons cannot reach Terminal, run this yourself:";
+"cli.panel.export.failed" = "Terminal could not be opened. Copy the command below and run it in your terminal instead.";
 "cli.panel.missing" = "This build did not include the tool. Run Scripts/build-cli.sh, then rebuild the app.";
 "companion.copyPath" = "Copy Path";
 "companion.copyCommand" = "Copy Command";
