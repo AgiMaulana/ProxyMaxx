@@ -5,11 +5,30 @@ public struct AndroidDevice: Sendable, Identifiable, Hashable {
     public let serial: String
     public let model: String
 
+    public init(serial: String, model: String) {
+        self.serial = serial
+        self.model = model
+    }
+
     public var id: String { serial }
 
     /// Android Studio AVDs are named `emulator-<console-port>`. Anything else is a real
     /// device or a third-party emulator, which is treated as a physical device.
     public var isEmulator: Bool { serial.hasPrefix("emulator-") }
+
+    /// The headline the guide lists a device under. `adb devices -l` reports a generic model
+    /// for every emulator (`sdk gphone64 arm64`), so a device is named by its model and an
+    /// emulator by its serial, never by a product name adb did not give.
+    public var titleLine: String {
+        guard !isEmulator else { return serial }
+        return model.isEmpty ? serial : model
+    }
+
+    /// The second line. The model is kept for an emulator where the headline is the serial.
+    public var subtitleLine: String {
+        guard isEmulator else { return serial }
+        return model.isEmpty ? serial : model
+    }
 
     public var displayName: String {
         model.isEmpty ? serial : "\(model) (\(serial))"
@@ -75,6 +94,29 @@ public enum AndroidToolchain {
             return []
         }
         return parseDevices(result.output)
+    }
+
+    /// The serials in `list` whose emulator is actually running.
+    ///
+    /// `adb devices -l` remembers an emulator after its process is gone, and reports no
+    /// version or image, so this is the one per-device fact the guide can state without
+    /// either shelling into the device or guessing. A physical device is taken as running.
+    public static func runningSerials(in list: [AndroidDevice]) -> Set<String> {
+        Set(list.filter { device in
+            guard let console = consolePort(forSerial: device.serial) else { return true }
+            return isListeningOnLoopback(port: console)
+        }.map(\.serial))
+    }
+
+    /// Whether the ADB shell on `serial` is already root. Read-only: it changes nothing on
+    /// the device, and is what lets the guide say a setup is in place rather than imply it.
+    public static func hasRootShell(serial: String) -> Bool {
+        guard let adb = adbPath(),
+              let result = try? Shell.run(adb, ["-s", serial, "shell", "id", "-u"]),
+              result.succeeded else {
+            return false
+        }
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "0"
     }
 
     /// The device to act on when none is named: the first emulator, else the first

@@ -4,164 +4,289 @@ import SystemKit
 
 /// The Android Emulator setup guide.
 ///
-/// One window, an advanced mode picker, an explicit Magisk consent, and the script's own
-/// output shown while it runs.
+/// One path, top to bottom: choose a target, choose a root method, install. Step 3 stays grey
+/// until a target exists, so the order is visible rather than something to infer. The output
+/// panel is always present: the six steps report, the installer's lines are the record.
 struct AndroidEmulatorGuideView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showManualCommand = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            Divider()
+        VStack(spacing: 0) {
+            GuideHeader { dismiss() }
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    introduction
-                    deviceSection
-                    modeSection
-                    if model.androidMode != .googleAPIs, model.androidMode != .manual, model.androidMode != .revert {
-                        magiskSection
-                    }
-                    if let error = model.androidError {
-                        errorNotice(error)
-                    }
-                    actions
-                    if model.androidMode == .manual || showManualCommand {
-                        manualCommandSection
-                    }
-                    logSection
+                VStack(spacing: 16) {
+                    TargetCard(active: true)
+                    RootCard(active: hasTarget || model.androidMode == .manual)
+                    InstallCard(active: hasTarget || model.androidMode == .manual)
                 }
-                .padding(18)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
+            InstallOutput()
+                .padding(.horizontal, 24)
+                .padding(.bottom, model.androidShowsOutput ? 20 : 16)
         }
-        .frame(width: 760, height: 640)
+        .frame(minWidth: 640, idealWidth: 760, maxWidth: .infinity,
+               minHeight: 560, idealHeight: 780, maxHeight: .infinity)
         .onAppear { model.refreshAndroidDevices() }
     }
 
-    private var header: some View {
-        HStack {
-            Text("android.emulator.title").font(.title2).bold()
-            Spacer()
-            Button("common.refresh") { model.refreshAndroidDevices() }
-            Button("common.done") { dismiss() }.keyboardShortcut(.defaultAction)
+    private var hasTarget: Bool { model.androidSelectedDevice != nil }
+}
+
+// MARK: - Header
+
+private struct GuideHeader: View {
+    let done: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("android.emulator.title")
+                    .font(.system(size: 20, weight: .bold))
+                Text("android.emulator.intro")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("common.done", action: done)
+                .controlSize(.large)
+                .keyboardShortcut(.cancelAction)
         }
-        .padding(16)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background { ZStack(alignment: .bottom) { Rectangle().fill(.bar); Divider() } }
     }
+}
 
-    private var introduction: some View {
-        Text("android.emulator.intro")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
+// MARK: - 1. Choose a target
 
-    private var deviceSection: some View {
-        GroupBox("android.emulator.target") {
-            VStack(alignment: .leading, spacing: 8) {
-                if model.androidDevices.isEmpty {
-                    Label("android.emulator.noDevice", systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                } else {
-                    Picker("android.emulator.device", selection: $model.androidSerial) {
-                        ForEach(model.androidDevices) { device in
-                            Text(device.displayName).tag(Optional(device.serial))
-                        }
-                    }
-                    .frame(maxWidth: 460)
-                }
+private struct TargetCard: View {
+    @EnvironmentObject var model: AppModel
+    let active: Bool
 
-                Toggle("android.emulator.includePhysical", isOn: $model.androidIncludePhysical)
-                    .toggleStyle(.checkbox)
-                    .help("android.emulator.includePhysicalHelp")
-
-                LabeledContent("android.emulator.proxyAddress") {
-                    Text(L10n.format(
-                        "android.emulator.proxyAddressValue",
-                        model.androidHostAddress,
-                        model.port,
-                        model.boundSocksPort ?? model.socksPort
-                    ))
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
-                }
-
-                if AndroidToolchain.adbPath() == nil {
-                    Label("android.emulator.adbMissing", systemImage: "xmark.octagon")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                if AndroidResources.tunnelAPK() == nil {
-                    Label("android.emulator.apkMissing", systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+    var body: some View {
+        StepCard(number: 1, title: "android.emulator.step.target", active: active) {
+            if model.androidDevices.isEmpty {
+                noDeviceRow
+            } else {
+                HStack(spacing: 10) {
+                    DevicePickerList()
+                    refreshButton
                 }
             }
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
 
-    private var modeSection: some View {
-        GroupBox("android.emulator.advancedMode") {
-            VStack(alignment: .leading, spacing: 8) {
-                Picker("", selection: $model.androidMode) {
-                    ForEach(AndroidInstallMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 320)
+            if let note = imageNote {
+                Notice(tone: .warning, text: note)
+            }
 
-                Text(model.androidMode.explanation)
+            if let error = model.androidError, !model.androidBusy, !model.androidFinished {
+                Notice(tone: .failure, text: error)
+            }
+
+            Toggle("android.emulator.includePhysical", isOn: $model.androidIncludePhysical)
+                .toggleStyle(.checkbox)
+                .help("android.emulator.includePhysicalHelp")
+
+            proxyFields
+
+            if AndroidToolchain.adbPath() == nil {
+                Label("android.emulator.adbMissing", systemImage: "xmark.octagon.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            if AndroidResources.tunnelAPK() == nil {
+                Label("android.emulator.apkMissing", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// The empty state is the refresh control: with nothing to pick, the row says what to
+    /// start and the only thing to do about it.
+    private var noDeviceRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "iphone.slash")
+                .font(.system(size: 22))
+                .foregroundStyle(.orange)
+                .frame(width: 36)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("android.emulator.noDevice.title")
+                    .font(.callout.weight(.semibold))
+                Text("android.emulator.noDevice.detail")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            refreshButton
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(.quaternary, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Re-reads `adb devices`. It marks rather than matters: an emulator started after the
+    /// sheet opened must be reachable without closing the sheet, and this list is the only
+    /// place that shows it.
+    private var refreshButton: some View {
+        Button {
+            model.refreshAndroidDevices()
+        } label: {
+            Label("common.refresh", systemImage: "arrow.clockwise")
+                .labelStyle(.iconOnly)
+        }
+        .help("android.emulator.refreshHelp")
+        .controlSize(.large)
+        .accessibilityLabel(Text("common.refresh"))
+    }
+
+    /// A physical device needs a security setting changed before `adb root` can work. A Play
+    /// image cannot say so from here, so the installer reports it once it runs.
+    private var imageNote: String? {
+        guard let device = model.androidSelectedDevice else { return nil }
+        if !device.isEmulator {
+            return L10n.string("android.emulator.physicalADBNote")
+        }
+        return nil
+    }
+
+    private var proxyFields: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                ValueField(label: "android.emulator.httpProxy", value: proxyAddress(http: true))
+                ValueField(label: "android.emulator.socks5", value: proxyAddress(http: false))
+            }
+            Text("android.emulator.hostNote")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func proxyAddress(http: Bool) -> String {
+        let port = http ? model.port : model.boundSocksPort ?? model.socksPort
+        return "\(model.androidHostAddress):\(port)"
+    }
+}
+
+// MARK: - 2. How to get root access
+
+private struct RootCard: View {
+    @EnvironmentObject var model: AppModel
+    let active: Bool
+
+    var body: some View {
+        StepCard(number: 2, title: "android.emulator.step.root", active: active) {
+            ModeSegments(selection: $model.androidMode)
+
+            Text(model.androidMode.explanation)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if showsMagisk {
+                Divider()
+                magiskSection
+            }
+        }
+    }
+
+    private var showsMagisk: Bool {
+        model.androidMode != .googleAPIs && model.androidMode != .manual && model.androidMode != .revert
     }
 
     private var magiskSection: some View {
-        GroupBox("android.emulator.playAVDs") {
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("android.emulator.magiskToggle", isOn: $model.androidEnableMagisk)
-                    .toggleStyle(.switch)
-
-                Text("android.emulator.magiskIntro")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("android.emulator.magiskConsent")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $model.androidEnableMagisk) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("android.emulator.magiskToggle")
+                        .font(.callout.weight(.semibold))
+                    Text("android.emulator.magiskIntro")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .toggleStyle(.switch)
+            .controlSize(.large)
+
+            factRows
+                .opacity(model.androidEnableMagisk ? 1 : 0.55)
         }
     }
 
-    /// Shown next to the button that caused it. The guide is a sheet, so an app-level alert
-    /// would be swallowed until the sheet closed, which looked like Install did nothing.
-    private func errorNotice(_ message: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
+    /// A grid keeps the three facts the same height, which is what makes them read as one
+    /// statement in three parts rather than three loose cards.
+    private var factRows: some View {
+        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow(alignment: .top) {
+                MagiskFact(tone: .green, title: "android.emulator.magisk.what",
+                           detail: "android.emulator.magisk.whatBody")
+                MagiskFact(tone: .blue, title: "android.emulator.magisk.untouched",
+                           detail: "android.emulator.magisk.untouchedBody")
+                MagiskFact(tone: .orange, title: "android.emulator.magisk.headsUp",
+                           detail: "android.emulator.magisk.headsUpBody")
+            }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+    }
+}
+
+// MARK: - 3. Install
+
+private struct InstallCard: View {
+    @EnvironmentObject var model: AppModel
+    let active: Bool
+    @State private var showManualCommand = false
+
+    var body: some View {
+        StepCard(number: 3, title: "android.emulator.step.install", active: active) {
+            if model.androidFinished, model.androidError == nil {
+                Notice(tone: .success, text: L10n.string("android.emulator.installed"))
+            } else if model.androidError != nil, !model.androidBusy {
+                Notice(tone: .failure, text: model.androidError ?? "")
+            }
+
+            actions
+
+            Text(hint)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if model.androidMode == .manual || showManualCommand || model.androidCommandPreview() == nil {
+                ManualCommandSection()
+            }
+        }
+    }
+
+    /// Says what is missing whenever a control is disabled, which is the whole reason the row
+    /// has a hint line rather than only a button state.
+    private var hint: String {
+        if model.androidBusy { return L10n.string("android.emulator.keepStudioOpen") }
+        if model.androidFinished, model.androidError == nil {
+            return L10n.string("android.emulator.connectedHint")
+        }
+        if model.androidError != nil { return L10n.string("android.emulator.output.hint") }
+        if model.androidMode == .manual { return L10n.string("android.emulator.manualStatus") }
+        if !hasTarget { return L10n.string("android.emulator.connectFirst") }
+        return L10n.string("android.emulator.ready")
+    }
+
+    private var hasTarget: Bool { model.androidSelectedDevice != nil }
+
+    private var canInstall: Bool {
+        guard !model.androidBusy else { return false }
+        return model.androidMode == .manual || hasTarget
     }
 
     private var actions: some View {
@@ -169,181 +294,67 @@ struct AndroidEmulatorGuideView: View {
             Button {
                 model.installCertificateOnAndroid()
             } label: {
-                Label(model.androidMode == .revert ? L10n.string("android.emulator.revert") : L10n.string("android.emulator.install"), systemImage: model.androidMode == .revert ? "arrow.uturn.backward" : "lock.shield")
+                Text(model.androidMode == .manual
+                     ? "android.emulator.showCommand"
+                     : model.androidBusy ? "android.emulator.installing" : "android.emulator.installCta")
+                    .frame(minWidth: 110)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.androidBusy || (model.androidDevices.isEmpty && model.androidMode != .manual))
+            .controlSize(.large)
+            .disabled(!canInstall)
 
-            Button {
-                model.revertAndroidChanges()
-            } label: {
-                Label("android.emulator.revertAll", systemImage: "arrow.uturn.backward")
+            Button("android.emulator.revertAll") { model.revertAndroidChanges() }
+                .controlSize(.large)
+                .disabled(model.androidBusy)
+
+            if model.androidMode != .manual {
+                Button {
+                    showManualCommand.toggle()
+                } label: {
+                    Text(showManualCommand
+                         ? "android.emulator.hideCommand"
+                         : "android.emulator.showCommand")
+                }
+                .accessibilityLabel(Text(L10n.string(showManualCommand
+                    ? "android.emulator.hideCommand"
+                    : "android.emulator.showCommand")))
+                    .buttonStyle(.link)
+                    .controlSize(.large)
             }
-            .disabled(model.androidBusy)
 
-            Button("android.emulator.showCommand") { showManualCommand.toggle() }
-                .disabled(model.androidMode == .manual)
-
-            Spacer()
-
-            if model.androidBusy {
-                ProgressView().controlSize(.small)
-            } else {
-                Label("android.emulator.noAdminPrompt", systemImage: "lock.open")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Spacer(minLength: 0)
         }
     }
+}
 
-    private var manualCommandSection: some View {
-        GroupBox("android.emulator.manualTitle") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("android.emulator.manualHint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+// MARK: - Manual command and log
 
-                if let command = model.androidCommandPreview() {
+/// Manual mode shows the exact command, and so does Show Command. The command depends on the
+/// mode, so the button that opens it is hidden in manual mode, where it is always shown.
+private struct ManualCommandSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("android.emulator.manualHint")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let command = model.androidCommandPreview() {
+                HStack(alignment: .top, spacing: 8) {
                     Text(command)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-
-                    HStack {
-                        Button("common.copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(command, forType: .string)
-                        }
-                        Spacer()
-                    }
-                } else {
-                    Text("android.emulator.resourcesMissing")
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                    CopyTextButton(text: command, accessibilityLabel: L10n.string("android.emulator.copyCommand"))
                 }
-            }
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var logSection: some View {
-        GroupBox("android.emulator.output") {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if model.androidLog.isEmpty {
-                            Text("android.emulator.noOutput")
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                        }
-                        ForEach(Array(model.androidLog.enumerated()), id: \.offset) { index, line in
-                            Text(line)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(index)
-                        }
-                    }
-                    .padding(8)
-                }
-                .frame(height: 190)
-                .onChange(of: model.androidLog.count) { _, count in
-                    guard count > 0 else { return }
-                    proxy.scrollTo(count - 1, anchor: .bottom)
-                }
+            } else {
+                Text("android.emulator.resourcesMissing")
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
-    }
-}
-
-/// The physical-device guide. Informational: it states the two manual steps, because a real
-/// device's trust store is the user's to change.
-struct AndroidDeviceGuideView: View {
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("android.device.title").font(.title2).bold()
-                Spacer()
-                Button("cert.export") { exportCA() }
-                Button("common.done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-            .padding(16)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("android.device.intro")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    GroupBox("android.device.step1") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("android.device.step1Hint")
-                                .font(.callout)
-                            code("\(AndroidToolchain.lanIPv4Address() ?? L10n.string("android.device.lanPlaceholder")):\(model.port)")
-                            Text("android.device.step1Instructions")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            if AndroidToolchain.lanIPv4Address() == nil {
-                                Label("android.device.noLAN", systemImage: "exclamationmark.triangle")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    GroupBox("android.device.step2") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("android.device.step2Body")
-                                .font(.callout)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("android.device.rootNote")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    Text("android.device.summary")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(18)
-            }
-        }
-        .frame(width: 640, height: 560)
-    }
-
-    private func exportCA() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "proxymaxx-ca.crt"
-        panel.allowedContentTypes = []
-        if panel.runModal() == .OK, let url = panel.url {
-            model.exportCertificate(to: url)
-        }
-    }
-
-    private func code(_ text: String) -> some View {
-        Text(text)
-            .font(.system(.callout, design: .monospaced))
-            .textSelection(.enabled)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
