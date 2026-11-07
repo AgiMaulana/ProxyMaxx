@@ -11,12 +11,16 @@ public enum IssueReporter {
     public static let maxBodyCharacters = 6_000
 
     /// The issue body: app identity plus the newest log lines from `0.log`.
+    ///
+    /// Log text is redacted on the way into the prefilled page. The user still has
+    /// the final say: the issue is only opened in the browser, never submitted, and
+    /// the body says so because redaction cannot promise a log line is harmless.
     public static func body(
         logFile: RotatingLogFile = LogKit.logFile,
         latestLineCount: Int = 200,
         maxCharacters: Int = maxBodyCharacters
     ) -> String {
-        let lines = logFile.latestLines(latestLineCount)
+        let lines = logFile.latestLines(latestLineCount).map(Redactor.redact)
         let header = """
         ### Description
 
@@ -25,6 +29,13 @@ public enum IssueReporter {
         ### Version
 
         \(versionText)
+
+        ### Privacy
+
+        These logs were checked for common secrets (authorization headers, cookies,
+        tokens, passwords, request URLs and home-directory paths) before they were put
+        in this page. Review the text before submitting: local logs can still contain
+        sensitive information, and opening this page does not submit the issue.
 
         ### Latest logs
 
@@ -88,6 +99,7 @@ public enum IssueReporter {
     private static func summaryLine(logFile: RotatingLogFile) -> String {
         guard let line = logFile.latestLines(1).last else { return "no recent logs" }
         let message = line.split(separator: "]", maxSplits: 2).last.map(String.init) ?? line
-        return String(message.trimmingCharacters(in: .whitespaces).prefix(120))
+        let redacted = Redactor.redact(message.trimmingCharacters(in: .whitespaces))
+        return String(redacted.prefix(120))
     }
 }

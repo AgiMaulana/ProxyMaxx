@@ -10,6 +10,7 @@ import RuleKit
 import SystemKit
 import ClientKit
 import LogKit
+import SentryKit
 
 /// Coordinates the proxy engine, the flow store, the rule store and the system-level
 /// integrations. Everything the UI observes lives here.
@@ -51,6 +52,26 @@ final class AppModel: ObservableObject {
     @Published var certificateCommonName: String = "ProxyMaxx Root CA"
     @Published var lastError: String?
     @Published var activityLog: [String] = []
+
+    // MARK: - Remote diagnostics
+
+    /// Remote crash reporting. The concrete Sentry implementation lives behind this
+    /// protocol so the rest of the app never imports the SDK.
+    let crashReporting: CrashReportingService
+    /// Off unless the user turned it on. Changing it both persists consent and
+    /// starts or stops the SDK, so there is no state where the UI and SDK disagree.
+    @Published var errorReportingEnabled: Bool = false {
+        didSet {
+            guard errorReportingEnabled != oldValue else { return }
+            CrashReportingConsent.setEnabled(errorReportingEnabled)
+            if errorReportingEnabled {
+                crashReporting.enable()
+            } else {
+                crashReporting.disable()
+            }
+        }
+    }
+    var isCrashReportingAvailable: Bool { crashReporting.isAvailable }
 
     // MARK: - Android
 
@@ -112,6 +133,22 @@ final class AppModel: ObservableObject {
 
     init() {
         LogKit.bootstrap()
+        let reporting = SentryCrashReportingService(
+            dsn: CrashReportingConfiguration.dsn,
+            environment: CrashReportingConfiguration.environment
+        )
+        crashReporting = reporting
+        // Consent is read before the SDK is touched. A build without a DSN stays a
+        // no-op build: the preference is cleared rather than left waiting to start
+        // reporting on a later launch the user did not explicitly approve.
+        let consented = CrashReportingConsent.isEnabled()
+        if consented, reporting.isAvailable {
+            errorReportingEnabled = true
+            reporting.enable()
+        } else if consented {
+            CrashReportingConsent.setEnabled(false)
+        }
+
         let stored = UserDefaults.standard.integer(forKey: Self.portDefaultsKey)
         if (1...65535).contains(stored) {
             port = stored
@@ -212,6 +249,12 @@ final class AppModel: ObservableObject {
         case .failure(let message):
             lastError = message
             report("certificate install failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: \(message)")
+            reportUnexpectedFailure(
+                DiagnosticError(code: "certificate-install-failed", message: message),
+                component: "CertKit.Trust",
+                operation: "install-certificate-cli",
+                errorCode: "certificate-install-failed"
+            )
         }
     }
 
@@ -280,6 +323,12 @@ final class AppModel: ObservableObject {
         } catch {
             self.lastError = "\(error)"
             self.log("Failed to start: \(error)")
+            self.reportUnexpectedFailure(
+                error,
+                component: "ProxyKit.Engine",
+                operation: "start",
+                errorCode: "proxy-start-failed"
+            )
         }
     }
 
@@ -333,8 +382,19 @@ final class AppModel: ObservableObject {
             }
         }
         
-        try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
-        
+        do {
+            try content.write(toFile: filePath, atomically: true, encoding: .utf8)
+        } catch {
+            lastError = "\(error)"
+            log("Map Local write failed: \(error)")
+            reportUnexpectedFailure(
+                error,
+                component: "RuleKit.MapLocal",
+                operation: "write-rule-response",
+                errorCode: "map-local-write-failed"
+            )
+        }
+
         let parsedURL = URL(string: flow.url)
         let cleanedURL = flow.url
             .replacingOccurrences(of: "https://", with: "")
@@ -598,6 +658,12 @@ final class AppModel: ObservableObject {
                     self.certificateInstalled = false
                     self.lastError = message
                     self.log("Certificate installation failed: \(message)")
+                    self.reportUnexpectedFailure(
+                        DiagnosticError(code: "certificate-install-failed", message: message),
+                        component: "CertKit.Trust",
+                        operation: "install-certificate",
+                        errorCode: "certificate-install-failed"
+                    )
                 }
             }
         }
@@ -638,9 +704,21 @@ final class AppModel: ObservableObject {
                 }
             }
             await MainActor.run {
-                if case .success = outcome {
+                switch outcome {
+                case .success:
                     self.certificateInstalled = false
                     self.log("Root certificate removed")
+                case .cancelled:
+                    break
+                case .failure(let message):
+                    self.lastError = message
+                    self.log("Certificate removal failed: \(message)")
+                    self.reportUnexpectedFailure(
+                        DiagnosticError(code: "certificate-remove-failed", message: message),
+                        component: "CertKit.Trust",
+                        operation: "remove-certificate",
+                        errorCode: "certificate-remove-failed"
+                    )
                 }
             }
         }
@@ -653,6 +731,12 @@ final class AppModel: ObservableObject {
             log("Exported certificate to \(url.path)")
         } catch {
             lastError = "\(error)"
+            reportUnexpectedFailure(
+                error,
+                component: "CertKit.Storage",
+                operation: "export-certificate",
+                errorCode: "certificate-export-failed"
+            )
         }
     }
 
@@ -1081,6 +1165,12 @@ final class AppModel: ObservableObject {
             registryWritten = true
         } catch {
             log("Could not record proxy ownership: \(error)")
+            reportUnexpectedFailure(
+                error,
+                component: "ProxyKit.Registry",
+                operation: "publish-ownership",
+                errorCode: "proxy-registry-write-failed"
+            )
         }
         guard commandConsumerTask == nil else { return }
         commandConsumerTask = Task { @MainActor [weak self] in
@@ -1286,6 +1376,30 @@ final class AppModel: ObservableObject {
             // ProxyKit already writes these through swift-log, so only mirror the UI feed.
             recordActivity(message)
         }
+    }
+
+    /// Stop the reporter on a clean exit so the SDK can flush what it already has.
+    /// The consent preference is left alone; it is only the live session ending.
+    func shutdownCrashReportingBeforeExit() {
+        crashReporting.disable()
+    }
+
+    /// Report only an unexpected failure. Reaches Sentry when consent is on, the DSN is
+    /// configured, and `EventSanitizer` allows the event through.
+    private func reportUnexpectedFailure(
+        _ error: Error,
+        component: String,
+        operation: String,
+        errorCode: String? = nil
+    ) {
+        crashReporting.capture(
+            error: error,
+            context: DiagnosticContext(
+                component: component,
+                operation: operation,
+                errorCode: errorCode
+            )
+        )
     }
 
     private func log(_ message: String) {

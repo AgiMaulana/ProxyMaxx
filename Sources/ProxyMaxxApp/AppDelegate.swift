@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.restoreSystemProxyBeforeExit()
         model?.flushCrossToolStateBeforeExit()
         model?.ruleStore.flushRulesToDisk()
+        model?.shutdownCrashReportingBeforeExit()
     }
 
     /// A window-less launch leaves the app running with capture on and nothing to look at:

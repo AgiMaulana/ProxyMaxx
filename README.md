@@ -16,8 +16,9 @@ Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in thi
 
 ## Why ProxyMaxx
 
-- **Free and open source.** MIT licence. No licence key, no trial, no subscription, no
-  telemetry.
+- **Free and open source.** MIT licence. No licence key, no trial, no subscription. Local
+  diagnostics are always available; optional crash reporting is off by default and only
+  runs after explicit consent.
 - **Native macOS app, not a Java or Qt wrapper.** SwiftUI front end on a SwiftNIO proxy
   engine, so it starts fast and looks like a Mac app.
 - **HTTPS interception without a privileged helper.** The root CA goes into the user trust
@@ -313,6 +314,10 @@ travels inside the app, so it is not a separate download; it is signed from the
 Without them the run still succeeds, with an unsigned tunnel that installs on an emulator
 only. The same workflow renders `Scripts/homebrew/proxymaxx.rb` and pushes it to the tap,
 which needs `TAP_GITHUB_TOKEN` because `GITHUB_TOKEN` cannot write to another repository.
+Optional error reporting reads its public DSN from the `SENTRY_DSN` repository secret and
+embeds it in the bundle; without the secret the build simply has no reporting endpoint.
+Events are tagged with a Sentry environment: `production` for release bundles, `development`
+for local debug builds.
 
 The tap lives at [AgiMaulana/homebrew-proxymaxx](https://github.com/AgiMaulana/homebrew-proxymaxx).
 Its `Casks/proxymaxx.rb` is generated: edit
@@ -339,6 +344,16 @@ translate the values (keep the keys and any `%@` or `%lld` placeholders), and re
 `Scripts/bundle-app.sh`. The bundler copies every `Resources/*.lproj` directory it finds.
 Activity-log lines and Android installer output stay in English because they are diagnostics,
 not UI copy.
+
+### Privacy and crash reporting
+
+`LogKit` writes detailed logs locally and always works. Optional remote error reporting uses
+Sentry, is **off by default**, and only starts after the user enables it in
+**Settings → Privacy & Diagnostics**. Events pass through a centralized sanitizer; intercepted
+traffic, headers, cookies, credentials, request URLs and log files are never sent. Two Sentry
+environments keep the data apart: `development` for debug builds and `production` for release
+bundles. See [`docs/privacy.md`](docs/privacy.md) for the full collection policy, the excluded
+data, and Sentry's retention terms.
 
 ## Privileged operations (CA trust, system proxy)
 

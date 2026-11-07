@@ -31,6 +31,17 @@ final class IssueReporterTests: XCTestCase {
         XCTAssertTrue(IssueReporter.body(logFile: logFile()).contains("empty"))
     }
 
+    func testBodyRedactsSecretsAndWarnsBeforeSubmission() {
+        let file = logFile()
+        file.append(#"Authorization: Bearer abc123 password=hunter2 /Users/alice/file.log"#)
+        let body = IssueReporter.body(logFile: file)
+        XCTAssertFalse(body.contains("abc123"))
+        XCTAssertFalse(body.contains("hunter2"))
+        XCTAssertFalse(body.contains("alice"))
+        XCTAssertTrue(body.contains("Privacy"))
+        XCTAssertTrue(body.contains("does not submit"))
+    }
+
     func testIssueURLCarriesTitleAndBody() throws {
         let file = logFile()
         file.append("boom")

@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "RuleKit", targets: ["RuleKit"]),
         .library(name: "SystemKit", targets: ["SystemKit"]),
         .library(name: "LogKit", targets: ["LogKit"]),
+        .library(name: "SentryKit", targets: ["SentryKit"]),
         .library(name: "CodeGenKit", targets: ["CodeGenKit"]),
     ],
     dependencies: [
@@ -30,6 +31,7 @@ let package = Package(
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.7"),
         .package(url: "https://github.com/f-meloni/SwiftBrotli.git", from: "0.1.0"),
         .package(url: "https://github.com/AgiMaulana/ZIPFoundation.git", exact: "0.9.21"),
+        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "9.33.0"),
     ],
     targets: [
         /// Product identity shared by every component that writes user data.
@@ -81,6 +83,16 @@ let package = Package(
             name: "LogKit",
             dependencies: ["Branding", .product(name: "Logging", package: "swift-log")]
         ),
+
+        // Sentry is kept behind this target so only the reporting implementation imports
+        // the SDK. Everything else depends on LogKit's `CrashReportingService` protocol.
+        .target(
+            name: "SentryKit",
+            dependencies: [
+                "LogKit",
+                .product(name: "Sentry", package: "sentry-cocoa"),
+            ]
+        ),
         .target(name: "CodeGenKit", dependencies: ["FlowKit"]),
 
         // Local process attribution shared by the app and CLI.
@@ -88,7 +100,7 @@ let package = Package(
 
         .executableTarget(
             name: "ProxyMaxxApp",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding", "LogKit"]
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding", "LogKit", "SentryKit"]
         ),
 
         // The companion CLI (`proxymaxx-cli`), a headless driver for AI agents. It lives
@@ -142,5 +154,13 @@ let package = Package(
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
         .testTarget(name: "SystemKitTests", dependencies: ["SystemKit"]),
         .testTarget(name: "LogKitTests", dependencies: ["LogKit"]),
+        .testTarget(
+            name: "SentryKitTests",
+            dependencies: [
+                "SentryKit",
+                "LogKit",
+                .product(name: "Sentry", package: "sentry-cocoa"),
+            ]
+        ),
     ]
 )

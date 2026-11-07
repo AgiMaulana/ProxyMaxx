@@ -86,10 +86,31 @@ jobs:
       # machine cannot drift in what a release contains.
       - name: Build app and companions
         env:
+          PROXYMAXX_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Release bundles always report to the production Sentry environment.
+          PROXYMAXX_SENTRY_ENVIRONMENT: production
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: Scripts/build-all.sh release
+
+      # A bundle built without the secret still works, it just cannot report. Say so in
+      # the run summary rather than shipping an app whose privacy toggle is dead.
+      - name: Report the Sentry environment
+        env:
+          SENTRY_DSN_SECRET: ${{ secrets.SENTRY_DSN }}
+        run: |
+          if [[ -z "$SENTRY_DSN_SECRET" ]]; then
+            echo "::warning::SENTRY_DSN is not set — this build cannot report errors."
+            exit 0
+          fi
+          # The bundle must launch through the generated wrapper, which is what carries
+          # the DSN (SENTRY_DSN) and the environment tag to the app.
+          EXECUTABLE="$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" dist/ProxyMaxx.app/Contents/Info.plist)"
+          [[ "$EXECUTABLE" == "ProxyMaxx.launcher" ]] || { echo "::error::the bundle does not use the Sentry launcher"; exit 1; }
+          grep -q 'PROXYMAXX_SENTRY_ENVIRONMENT:-production' dist/ProxyMaxx.app/Contents/MacOS/ProxyMaxx.launcher \
+            || { echo "::error::the launcher is not pinned to the production environment"; exit 1; }
+          echo "Error reporting is available and tagged production."
 
       - name: Verify the bundled APK signature
         if: env.STORE_FILE != ''
