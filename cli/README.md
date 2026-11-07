@@ -334,9 +334,13 @@ proxymaxx-cli rule remove --url 'api.example.com/v1/user/profile'
 proxymaxx-cli stop
 ```
 
-`flows --follow` is the live form: it replays the session, then tails new flows until you
-interrupt it or the engine stops. Each flow is printed once, from its closing snapshot. Because
-the session log is plain NDJSON, `grep`, `jq` and the built-in filters work over the same file.
+`flows --follow` is the live form: it tails new flows until you interrupt it or the engine
+stops. Each flow is printed once, from its closing snapshot. Joining a session in progress
+does not replay what the engine already captured: those flows belong to the session, not to
+you, and a flow caught mid-transfer is printed once when it closes. With no engine running,
+it reads the whole retained log instead; `--out` always reads that log from its start.
+Because the session log is plain NDJSON, `grep`, `jq` and the built-in filters work over the
+same file.
 
 Open the Mac app at any point. It attaches to the running engine and shows the same flows,
 because the host writes them into `ipc/flows/` as it captures them.

@@ -37,15 +37,25 @@ enum FlowsCommand {
             return
         }
 
-        // Follow: replay what is already there, then tail new lines until interrupted or
-        // the engine stops. The log keeps every snapshot the engine emitted, but a reader
-        // promises one line per flow, so `Follower` holds a flow until its closing
-        // snapshot and surfaces it once; `--limit` therefore counts flows, not snapshots.
-        // A flow still open at the end is surfaced from its latest snapshot, which is what
-        // a later non-following read would show.
+        // Follow: tail new lines until interrupted or the engine stops. The log keeps
+        // every snapshot the engine emitted, but a reader promises one line per flow, so
+        // `Follower` holds a flow until its closing snapshot and surfaces it once;
+        // `--limit` therefore counts flows, not snapshots. A flow still open at the end
+        // is surfaced from its latest snapshot, which is what a later non-following read
+        // would show.
+        //
+        // The session already in the log is replayed only when this reads a finished
+        // capture. While an engine owns the session, those flows are the session's own
+        // history, so joining it must show traffic from the join onward rather than
+        // replay them as if they had just arrived. `--out` names a log this CLI is not
+        // serving, so it is read with its history, and so is any log left by a stopped
+        // engine. Decided before the loop, because `serve` truncates the log as it
+        // starts and a late check would miss the history that is about to be replaced.
+        let pastLog = arguments.value("out").map { !$0.isEmpty } ?? false
+        let fromStart = pastLog || ProxyRegistry.read() == nil
         let interrupt = InterruptFlag()
         interrupt.install()
-        var follower = SessionLog.Follower(url: url)
+        var follower = SessionLog.Follower(url: url, fromStart: fromStart)
         var emitted = 0
 
         /// Print the selected flows, stopping as soon as `--limit` is reached. Returns
