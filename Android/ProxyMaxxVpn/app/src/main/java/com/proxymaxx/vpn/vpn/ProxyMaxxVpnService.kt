@@ -34,6 +34,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * A private range address is used deliberately — `addDisallowedApplication` keeps this app's
  * own sockets out of its own tunnel, which would otherwise be a loop.
+ *
+ * The route is `0.0.0.0/0`, which also catches a client's connections to this device's own
+ * loopback. Those are deliberately not relayed: a protected socket is dialled from the tunnel
+ * app's side and cannot reach the peer the client wanted, and the client's own connection
+ * would have completed on its own. [PacketRouter] therefore leaves loopback traffic alone —
+ * see [isLoopbackTraffic] — which is what keeps tools that drive an app through an on-device
+ * server working (Maestro's `maestro-app/driver` over `adb forward` is the case that
+ * prompted it).
  */
 class ProxyMaxxVpnService : VpnService() {
 

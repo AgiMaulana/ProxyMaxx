@@ -22,6 +22,8 @@ app ──▶ tun ──▶ PacketRouter ──┬── TCP 80/443 ──▶ SO
 - **Other TCP ports** are dialled directly, so the device keeps working normally.
 - **UDP** is forwarded directly, except **destination port 443**, which is dropped so QUIC
   falls back to TCP where it can actually be inspected.
+- **Loopback is never relayed.** Traffic to or from `localhost` is not proxied, not dropped and
+  not carried: the device's own stack completes it. See the note under *Limits* for why.
 - **Nothing is decrypted on the device.** The tunnel is a pipe; the proxy is what decides
   whether a stream is decrypted.
 
@@ -108,3 +110,10 @@ system-store step, not something this app does.
   general-purpose TCP stack.
 - **HTTP/2 and HTTP/3 are not parsed here.** The tunnel never looks above the transport layer,
   so anything a client chooses to speak is carried unchanged.
+- **Loopback is left alone.** The `0.0.0.0/0` route also captures a client's connections to the
+  device's own `localhost`. Those cannot be relayed: the relay socket is dialled from the tunnel
+  app's side and reaches that side's loopback, not the peer the client asked for. Android already
+  routes `127.0.0.0/8` over `lo`, so the client's connection completes on its own — and that is
+  what is allowed to happen. This keeps on-device tools working, notably Maestro, whose
+  `maestro-app/driver` gRPC server is reached over `adb forward` and fails with `os error 61`
+  when its `localhost` traffic enters the tunnel.

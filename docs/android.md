@@ -93,6 +93,25 @@ For scripted or headless use, the same paths are reachable as flags:
 Output goes to stderr with an `[cli]` prefix, and the full installer log is written to
 `~/Library/Application Support/ProxyMaxx/android/run.log`.
 
+## Using UI automation tools with the tunnel up
+
+UI automation drives the app over `adb forward` to a server running on the device — Maestro
+runs `maestro-app/driver`, installed on first use and reached on `localhost` from the helper.
+The tunnel does not interfere: connections to loopback are exempt, so they complete as the
+driver made them. If Maestro fails anyway with `DeviceServerDiedException` on the first
+`deviceInfo` call ([issue #22](https://github.com/AgiMaulana/ProxyMaxx/issues/22)), check, in
+order:
+
+1. **The tunnel app is current.** Fixes for the loopback exemption ship in the tunnel APK, so
+   rebuild and reinstall it with the installer rather than keeping an older copy on the device.
+2. **The driver installed at all.** `adb -s <serial> shell pm list packages | grep maestro`
+   should list `dev.mobile.maestro`; if it does not, the helper died before installing it, which
+   is the failure itself and not an effect of the proxy.
+3. **The channel is alive.** `adb -s <serial> forward --list` shows the forwarded port; a
+   missing forward means the helper never started its server.
+
+Maestro's own traffic to the app under test still goes through the tunnel like any other app's.
+
 ## Where things live
 
 | Path | What |

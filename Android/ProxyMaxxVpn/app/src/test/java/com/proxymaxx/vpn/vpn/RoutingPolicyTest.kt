@@ -3,6 +3,7 @@ package com.proxymaxx.vpn.vpn
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.InetAddress
 
 class RoutingPolicyTest {
 
@@ -27,6 +28,30 @@ class RoutingPolicyTest {
     fun `dropping the http-only restriction sends every port to the proxy`() {
         assertTrue(tunnelsThroughProxy(everything, 22))
         assertTrue(tunnelsThroughProxy(everything, 8080))
+    }
+
+    private fun toward(address: String): Boolean = isLoopbackTraffic(
+        InetAddress.getByName("10.0.2.15"),
+        InetAddress.getByName(address),
+    )
+
+    @Test
+    fun `localhost destinations are this device talking to itself`() {
+        assertTrue(toward("127.0.0.1"))
+        assertTrue(toward("127.0.0.53"))
+        assertTrue(isLoopbackTraffic(
+            InetAddress.getByName("10.0.2.15"),
+            InetAddress.getByAddress(ByteArray(15) + 1.toByte()),
+        ))
+        assertFalse(toward("10.0.2.2"))
+        assertFalse(toward("10.255.0.1"))
+        assertFalse(toward("203.0.113.7"))
+    }
+
+    @Test
+    fun `a packet from loopback is left alone too`() {
+        // A server answering, or a local proxy, is addressed *from* loopback rather than to it.
+        assertTrue(isLoopbackTraffic(InetAddress.getByName("127.0.0.1"), InetAddress.getByName("10.0.2.15")))
     }
 
     @Test

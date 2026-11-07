@@ -96,6 +96,8 @@ internal class PacketRouter(
     }
 
     private fun handleTcp(packet: ByteArray, header: Ipv4Header) {
+        // Left to complete on the device itself — see [isLoopbackTraffic].
+        if (isLoopbackTraffic(header.source, header.destination)) return
         val segment = Ipv4.tcpSegment(packet, header) ?: return
         val key = flowKey(
             header.source, segment.sourcePort,
@@ -131,6 +133,9 @@ internal class PacketRouter(
     }
 
     private fun handleUdp(packet: ByteArray, header: Ipv4Header) {
+        // Also the reason the QUIC drop below is safe to apply unconditionally: a loopback
+        // datagram never reaches it.
+        if (isLoopbackTraffic(header.source, header.destination)) return
         val segment = Ipv4.udpSegment(packet, header) ?: return
         if (segment.destinationPort == QUIC_PORT) return
         if (segment.payload.isEmpty()) return

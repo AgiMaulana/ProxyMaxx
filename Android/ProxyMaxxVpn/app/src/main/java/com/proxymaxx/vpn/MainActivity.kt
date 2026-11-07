@@ -389,7 +389,7 @@ private fun VpnScreen(
                 text = if (connected)
                     "Disconnect to change proxy settings."
                 else
-                    "Some frameworks ignore the system proxy. ProxyMaxx routes all device traffic so nothing is missed.",
+                    "Some frameworks ignore the system proxy. ProxyMaxx routes device traffic so nothing is missed, leaving localhost to the device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
