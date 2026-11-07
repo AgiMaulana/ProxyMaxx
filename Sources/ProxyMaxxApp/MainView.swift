@@ -11,7 +11,6 @@ struct MainView: View {
     @State private var filter = FlowFilter()
     @State private var selection: UUID?
     @State private var showSSLProxying = false
-    @State private var showCertificates = false
     @State private var showLog = false
     /// Set when capture emptied the table and left a device selection whose emulator stopped.
     @State private var deviceGone = false
@@ -46,7 +45,9 @@ struct MainView: View {
         .sheet(isPresented: $model.showMapLocalWindow) {
             MapLocalView(rules: model.ruleStore) { model.applyRules() }
         }
-        .sheet(isPresented: $showCertificates) { CertificatesView().environmentObject(model) }
+        .sheet(isPresented: $model.showCertificateSheet) {
+            CertificatesView().environmentObject(model)
+        }
         .sheet(isPresented: $showLog) { LogView().environmentObject(model) }
         .sheet(isPresented: $model.showAndroidEmulatorGuide) {
             AndroidEmulatorGuideView().environmentObject(model)
@@ -330,7 +331,7 @@ struct MainView: View {
 
             Button { showSSLProxying = true } label: { Label("common.sslProxying", systemImage: "lock.shield") }
             Button { model.showMapLocalWindow = true } label: { Label("common.mapLocal", systemImage: "doc.badge.gearshape") }
-            Button { showCertificates = true } label: { Label("common.certificates", systemImage: "checkmark.seal") }
+            Button { model.showCertificateSheet = true } label: { Label("common.certificates", systemImage: "checkmark.seal") }
             Button {
                 model.refreshAndroidDevices()
                 model.showAndroidEmulatorGuide = true
@@ -399,7 +400,7 @@ struct MainView: View {
             Text(L10n.string("main.trustCertificateRequired"))
                 .font(.callout)
             Spacer()
-            Button("main.trustCertificateAction") { showCertificates = true }
+            Button("main.trustCertificateAction") { model.showCertificateSheet = true }
                 .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, 12)

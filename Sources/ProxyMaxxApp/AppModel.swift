@@ -35,6 +35,34 @@ final class AppModel: ObservableObject {
     @Published private(set) var boundSocksPort: Int?
     @Published private(set) var systemProxyEnabled = false
     @Published private(set) var certificateInstalled = false
+    /// The Certificate sheet is a property of the model, not of one window's `@State`, so
+    /// the Settings window can open it on the main window, the same way it opens the
+    /// Android guides.
+    @Published var showCertificateSheet = false
+
+    /// Re-read the user trust settings for the root certificate.
+    ///
+    /// Trust lives in the keychain, not in this process: it can have been granted or
+    /// withdrawn from Keychain Access, from a script, or by an install that outlived a
+    /// crash. The Certificate sheet calls this so what it shows is the current state.
+    func refreshCertificateTrust() {
+        certificateInstalled = CertificateTrust.isInstalled(commonName: certificateCommonName)
+        if certificateInstalled {
+            // The request that was refused is no longer refused for this reason.
+            trustCertificateRequired = false
+        }
+    }
+
+    /// Put the CA's common name on screen before the proxy has started.
+    ///
+    /// The name is normally read when the engine starts, so a user who opens Settings or the
+    /// Certificate sheet first would see the blank field. The CA file exists on disk from the
+    /// first run whether or not the engine is up, so read it from there.
+    func loadCertificateNameIfNeeded() {
+        guard certificateCommonName.isEmpty, let authority = try? CertificateStorage.loadOrCreate() else { return }
+        certificateCommonName = authority.commonName
+    }
+
     /// Set when a System Proxy request was refused for want of a trusted root certificate.
     /// The window turns this into a banner that names the cause and opens the Certificates
     /// pane, so the refusal leads somewhere instead of ending in an alert.
@@ -765,8 +793,13 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Write the root CA as PEM. The Android Chrome/Chromium builds take a PEM in `.crt`,
+    /// and macOS and most other tools read it too.
     func exportCertificate(to url: URL) {
-        guard let authority else { return }
+        guard let authority else {
+            lastError = L10n.string("error.startForCertShort")
+            return
+        }
         do {
             try CertificateStorage.exportPEM(authority, to: url)
             log("Exported certificate to \(url.path)")

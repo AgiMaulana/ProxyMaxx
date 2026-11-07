@@ -99,137 +99,242 @@ struct SSLProxyingView: View {
 
 // MARK: - Certificates
 
+/// The Certificate sheet: where the root CA is trusted, exported and explained.
+///
+/// It is opened from the toolbar, from a refused System Proxy request, and from
+/// "Trust certificate" in Settings, so it has to work as a destination: the state and the
+/// step that changes it come first, and the details (where trust lands, other devices,
+/// manual setup) follow below.
 struct CertificatesView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-
-    /// Shared width of the label column, so the certificate values line up.
-    private let labelWidth: CGFloat = 112
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    rootCertificateSection
-                    actionRow
-                    if BiometricGate.isAvailable { biometricToggle }
-                    trustSection
+                VStack(alignment: .leading, spacing: 22) {
+                    rootCertificateCard
+                    trustScopeSection
+                    otherDevicesSection
+                    if BiometricGate.isAvailable { securitySection }
                     manualSetupSection
                 }
-                .padding(18)
+                .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 700, height: 620)
+        .frame(width: 680, height: 680)
         .onExitCommand { dismiss() }
+        .onAppear {
+            // Trust can have changed outside the app since the last look.
+            model.refreshCertificateTrust()
+            model.loadCertificateNameIfNeeded()
+        }
     }
 
     private var header: some View {
-        HStack {
-            Text("common.certificates").font(.title2).bold()
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("cert.title").font(.title2).bold()
+                Text("cert.subtitle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
             Button("common.done") { dismiss() }.keyboardShortcut(.defaultAction)
         }
-        .padding(18)
+        .padding(20)
     }
 
-    private var rootCertificateSection: some View {
-        card("cert.root") {
-            VStack(alignment: .leading, spacing: 10) {
-                row("cert.commonName", model.certificateCommonName)
-                row("common.trusted", model.certificateInstalled ? L10n.string("cert.trustedUser") : L10n.string("common.no"))
-                Text("cert.intro")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
+    // MARK: Identity and the step that matters
+
+    private var rootCertificateCard: some View {
+        ToolCard {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: model.certificateInstalled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(model.certificateInstalled ? Color.green : Color.orange)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(verbatim: model.certificateCommonName)
+                            .font(.headline)
+                            .textSelection(.enabled)
+                        CertificateStatusChip(trusted: model.certificateInstalled)
+                    }
+                    Text("cert.intro")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var actionRow: some View {
-        HStack(spacing: 8) {
             Button {
                 model.installCertificate()
             } label: {
-                Label(model.certificateInstalled ? L10n.string("cert.reinstall") : L10n.string("cert.installAndTrust"), systemImage: "lock.shield")
+                Label(
+                    model.certificateInstalled ? L10n.string("cert.reinstall") : L10n.string("cert.installAndTrust"),
+                    systemImage: "checkmark.shield"
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
             }
             .buttonStyle(.borderedProminent)
-
-            Button {
-                exportCertificate()
-            } label: {
-                Label("cert.export", systemImage: "square.and.arrow.up")
-            }
-
-            Button {
-                dismiss()
-                model.refreshAndroidDevices()
-                model.showAndroidEmulatorGuide = true
-            } label: {
-                Label("cert.installAndroid", systemImage: "candybarphone")
-            }
-
-            Spacer(minLength: 0)
+            .controlSize(.large)
+            .padding(.top, 4)
         }
     }
 
-    private var biometricToggle: some View {
-        Toggle(
-            L10n.format("cert.authoriseWith", BiometricGate.displayName),
-            isOn: $model.useTouchIDForCertificates
-        )
-        .toggleStyle(.switch)
-        .help(Text(verbatim: L10n.format("cert.biometricHelp", BiometricGate.displayName)))
-        .frame(maxWidth: .infinity, alignment: .leading)
+    // MARK: Where it is trusted
+
+    private var trustScopeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeading("cert.trustLocation")
+            ToolCard(padding: 0) {
+                trustScopeRow(
+                    symbol: model.certificateInstalled ? "checkmark" : "minus",
+                    tint: model.certificateInstalled ? .green : .secondary,
+                    title: "cert.scopeUser",
+                    detail: "cert.scopeUserDetail"
+                )
+                Divider().padding(.leading, 54)
+                trustScopeRow(
+                    symbol: "minus",
+                    tint: .secondary,
+                    title: "cert.scopeSystem",
+                    detail: "cert.scopeSystemDetail"
+                )
+            }
+        }
     }
 
-    private var trustSection: some View {
-        card("cert.trustLocation") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("cert.trustedUserHelp")
-                    .font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("cert.machineWideHelp")
+    private func trustScopeRow(
+        symbol: String,
+        tint: Color,
+        title: LocalizedStringKey,
+        detail: LocalizedStringKey
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.callout.weight(.semibold))
+                Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+
+    // MARK: Other devices
+
+    /// Both rows use what already exists: the Export CA… save panel, and the Android guide
+    /// the toolbar opens. Only the presentation as a list is new.
+    private var otherDevicesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeading("cert.otherDevices")
+            ToolCard(padding: 0) {
+                ToolRow(symbol: "square.and.arrow.up", title: "cert.export", detail: "cert.exportDetail") {
+                    exportCertificate()
+                }
+                Divider().padding(.leading, 54)
+                ToolRow(
+                    symbol: "candybarphone",
+                    title: "cert.installAndroid",
+                    detail: "cert.installAndroidDetail"
+                ) {
+                    dismiss()
+                    model.refreshAndroidDevices()
+                    model.showAndroidEmulatorGuide = true
+                }
+            }
         }
     }
+
+    // MARK: Security
+
+    private var securitySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeading("cert.security")
+            ToolCard {
+                Toggle(isOn: $model.useTouchIDForCertificates) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.format("cert.confirmChanges", BiometricGate.displayName))
+                            .font(.callout.weight(.semibold))
+                        Text(L10n.format("cert.confirmChangesDetail", BiometricGate.displayName))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accessibilityLabel(Text(L10n.format("cert.confirmChanges", BiometricGate.displayName)))
+            }
+        }
+    }
+
+    // MARK: Manual setup
 
     private var manualSetupSection: some View {
-        card("cert.manualSetup") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("cert.pointClient").font(.callout)
-                code("curl -x http://127.0.0.1:\(model.port) https://example.com")
-                Text("cert.trustExported")
-                    .font(.callout)
-                    .padding(.top, 6)
-                code("curl --cacert /path/to/proxymaxx-ca.crt -x http://127.0.0.1:\(model.port) https://example.com")
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeading("cert.manualSetup")
+            ToolCard {
+                manualStep(number: "1", title: "cert.pointClient", command: pointClientCommand)
+                manualStep(number: "2", title: "cert.trustExported", command: trustExportedCommand)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// Native `GroupBox` label; the extra bottom padding widens AppKit's ~4pt
-    /// label-to-card gap to 10pt without taking the title out of the box.
-    private func card<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
-        GroupBox {
-            content()
-        } label: {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .padding(.bottom, 6)
+    private func manualStep(number: String, title: LocalizedStringKey, command: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(verbatim: number)
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Text(title).font(.callout.weight(.semibold))
+            }
+            HStack(spacing: 8) {
+                Text(verbatim: command)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(command)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                CopyTextButton(text: command, accessibilityLabel: L10n.string("common.copy"))
+            }
+            .padding(9)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Derived values
+
+    /// The attached engine's port when one owns the proxy, otherwise the saved port.
+    private var pointClientCommand: String {
+        "curl -x http://127.0.0.1:\(model.activeProxyPort) https://example.com"
+    }
+
+    private var trustExportedCommand: String {
+        "curl --cacert /path/to/proxymaxx-ca.crt -x http://127.0.0.1:\(model.activeProxyPort) https://example.com"
+    }
+
+    private func sectionHeading(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
     }
 
     private func exportCertificate() {
@@ -239,29 +344,6 @@ struct CertificatesView: View {
         if panel.runModal() == .OK, let url = panel.url {
             model.exportCertificate(to: url)
         }
-    }
-
-    private func row(_ title: LocalizedStringKey, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(width: labelWidth, alignment: .leading)
-            Text(value)
-                .font(.system(.callout, design: .monospaced))
-                .textSelection(.enabled)
-        }
-    }
-
-    private func code(_ text: String) -> some View {
-        Text(text)
-            .font(.system(.caption, design: .monospaced))
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 
@@ -304,117 +386,262 @@ struct LogView: View {
 
 // MARK: - Settings
 
+/// The Settings pane: proxy state and ports, the certificate's trust at a glance, and error
+/// reporting. Each question a user arrives with is answered on the surface (running?
+/// trusted? where do these ports point?), with the longer explanation beneath it.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
 
-    /// Shared width of the label column, so values line up down the pane.
-    private let labelWidth: CGFloat = 116
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            section("settings.proxy") {
-                row("settings.listenAddress") {
-                    Text("127.0.0.1")
-                        .font(.system(.callout, design: .monospaced))
-                }
-                row("settings.httpPort") {
-                    portField("9090", value: $model.port)
-                        .accessibilityLabel("settings.httpPort")
-                }
-                row("settings.socksPort") {
-                    portField("8989", value: $model.socksPort)
-                        .accessibilityLabel("settings.socksPort")
-                }
-                row("common.status") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(model.isRunning ? Color.green : Color.secondary)
-                            .frame(width: 8, height: 8)
-                            .accessibilityHidden(true)
-                        Text(model.isRunning ? L10n.string("common.running") : L10n.string("common.stopped"))
-                            .font(.callout)
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                HStack(alignment: .top, spacing: 16) {
+                    proxyCard
+                    VStack(spacing: 16) {
+                        certificateCard
+                        privacyCard
                     }
+                    .frame(width: 330)
                 }
-                Text("settings.portHint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
+                .padding(20)
             }
-            section("settings.certificate") {
-                row("settings.commonName") {
-                    Text(model.certificateCommonName)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-                row("common.trusted") {
-                    Text(model.certificateInstalled ? L10n.string("common.yes") : L10n.string("common.no"))
-                        .font(.callout)
-                }
-            }
-            section("settings.privacy") {
-                Toggle("settings.errorReporting", isOn: $model.errorReportingEnabled)
-                    .toggleStyle(.switch)
-                    .disabled(!model.isCrashReportingAvailable)
-                if !model.isCrashReportingAvailable {
-                    Text("settings.errorReportingUnavailable")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text("settings.errorReportingHint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if model.errorReportingDeclinedAtLaunch {
-                    Text("settings.errorReportingAsked")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Button("settings.privacyInfo") {
-                    if let url = URL(string: "https://github.com/AgiMaulana/ProxyMaxx/blob/main/docs/privacy.md") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(.link)
-            }
-            section("settings.about") {
-                Text(ProxyMaxxAbout.summary)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Divider()
+            footer
         }
-        .padding(24)
-        .frame(width: 520, alignment: .leading)
+        // Apple's pane keeps a minimum it enforces, and its size is persisted. Asking for the
+        // size the content needs means every row is handed only what it needs: a scroll view
+        // otherwise spreads the window's spare height into the cards as empty space. Below
+        // about 640pt the pane scrolls instead.
+        .frame(width: 820, height: 600)
+        .onAppear {
+            model.loadCertificateNameIfNeeded()
+            model.refreshCertificateTrust()
+        }
     }
 
-    private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            content()
+    // MARK: Proxy
+
+    private var proxyCard: some View {
+        ToolCard(spacing: 16) {
+            sectionHeading("settings.proxy")
+            proxyState
+            listenAddressRow
+            portFields
+            // Ports are applied by the engine when it starts, so the hint appears only
+            // while that is true of the current state.
+            Text(model.isRunning ? "settings.portsRunningHint" : "settings.portHint")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private var portFields: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 12) {
+                portField(
+                    title: "settings.httpPort",
+                    value: $model.port,
+                    scheme: "http://",
+                    help: "settings.httpPortHelp"
+                )
+                portField(
+                    title: "settings.socksPort",
+                    value: $model.socksPort,
+                    scheme: "socks5://",
+                    help: "settings.socksPortHelp"
+                )
+            }
+        }
+    }
+
+    /// The state word is the card's headline, because "is it running?" is the question the
+    /// pane is usually opened to answer.
+    private var proxyState: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(model.isRunning ? Color.green : Color.secondary)
+                .frame(width: 10, height: 10)
+                .accessibilityHidden(true)
+            Text(model.isRunning ? "common.running" : "common.stopped")
+                .font(.title2.weight(.semibold))
+            if let owner = model.externalOwner {
+                Text(owner.owner == .cli ? "settings.servedByCLI" : "settings.servedByAnotherApp")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var listenAddressRow: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("settings.listenAddress")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(verbatim: "127.0.0.1")
+                    .font(.system(.title3, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            Spacer()
+            Label("settings.localOnly", systemImage: "lock")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .help(Text("settings.localOnlyHelp"))
+        }
+        .padding(12)
+        .background(.background, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.quaternary))
+    }
+
+    private func portField(
+        title: LocalizedStringKey,
+        value: Binding<Int>,
+        scheme: String,
+        help: LocalizedStringKey
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("", value: value, format: .number.grouping(.never))
+                .textFieldStyle(.plain)
+                .font(.system(.title2, design: .monospaced))
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.background, in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(nsColor: .separatorColor)))
+                .disabled(model.isRunning)
+                .accessibilityLabel(Text(title))
+                .help(Text(help))
+            Text(verbatim: "\(scheme)127.0.0.1:\(value.wrappedValue)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row<Content: View>(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
-            Text(label)
-                .font(.callout)
+    // MARK: Certificate
+
+    /// A summary, not a control surface: the state, the name, and one way forward. The
+    /// button opens the Certificate sheet on the main window, so the trust step is taken
+    /// where its explanation, Android steps and manual setup live.
+    private var certificateCard: some View {
+        ToolCard(spacing: 12) {
+            HStack {
+                sectionHeading("settings.certificate")
+                Spacer()
+                CertificateStatusChip(trusted: model.certificateInstalled)
+            }
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("settings.commonName")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(verbatim: model.certificateCommonName)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            Button(action: openCertificateSheet) {
+                HStack {
+                    Text(model.certificateInstalled ? "settings.reviewCertificate" : "settings.trustCertificate")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+            .controlSize(.large)
+            Text("settings.opensCertificateSheet")
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(width: labelWidth, alignment: .leading)
-            content()
-            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
         }
     }
 
-    private func portField(_ placeholder: String, value: Binding<Int>) -> some View {
-        TextField(placeholder, value: value, format: .number.grouping(.never))
-            .textFieldStyle(.roundedBorder)
-            .monospacedDigit()
-            .multilineTextAlignment(.trailing)
-            .frame(width: 84)
-            .disabled(model.isRunning)
+    private func openCertificateSheet() {
+        // Presented by the main window: the sheet belongs to the proxy's state, not to this
+        // pane, and it must be the same sheet the toolbar and the trust banner open.
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.canBecomeKey && window.title == "ProxyMaxx" {
+            window.makeKeyAndOrderFront(nil)
+            break
+        }
+        model.showCertificateSheet = true
+    }
+
+    // MARK: Privacy
+
+    private var privacyCard: some View {
+        ToolCard(spacing: 12) {
+            sectionHeading("settings.privacy")
+            Toggle(isOn: $model.errorReportingEnabled) {
+                Text("settings.errorReporting")
+                    .font(.callout.weight(.semibold))
+            }
+            .toggleStyle(.switch)
+            .disabled(!model.isCrashReportingAvailable)
+            Text("settings.errorReportingHint")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SpanChips()
+            if !model.isCrashReportingAvailable {
+                Text("settings.errorReportingUnavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if model.errorReportingDeclinedAtLaunch {
+                Text("settings.errorReportingAsked")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("settings.privacyInfo") {
+                if let url = URL(string: "https://github.com/AgiMaulana/ProxyMaxx/blob/main/docs/privacy.md") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    // MARK: Chrome
+
+    private func sectionHeading(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+    }
+
+    private var footer: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(verbatim: "ProxyMaxx")
+                .font(.footnote.weight(.semibold))
+            Text("settings.aboutText")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 }
