@@ -18,7 +18,9 @@ Nothing is held back behind a paid tier: every feature ProxyMaxx ships is in thi
 
 - **Free and open source.** MIT licence. No licence key, no trial, no subscription. Local
   diagnostics are always available; optional crash reporting is off by default and only
-  runs after explicit consent.
+  runs after explicit consent. A once-a-day GitHub release check shows a new version and
+  upgrades through Homebrew; it sends no identifier, and Settings → Updates has a
+  **Check Now** button.
 - **Native macOS app, not a Java or Qt wrapper.** SwiftUI front end on a SwiftNIO proxy
   engine, so it starts fast and looks like a Mac app.
 - **HTTPS interception without a privileged helper.** The root CA goes into the user trust

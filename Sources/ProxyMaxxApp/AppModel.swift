@@ -136,6 +136,155 @@ final class AppModel: ObservableObject {
         showErrorReportingPrompt = false
     }
 
+    // MARK: - Updates
+
+    /// The newest release GitHub reports, once a check has succeeded.
+    @Published private(set) var availableUpdate: LatestRelease?
+    /// The version the executed copy reports, or nil for an unbundled build. Nil means the
+    /// app never claims an update: `swift run` is not an installation.
+    @Published private(set) var installedVersion: ReleaseVersion?
+    /// Which upgrade the origin allows. Decided once, at launch, because it depends only on
+    /// where the bundle sits.
+    @Published private(set) var installOrigin: InstallOrigin = .development
+    /// Drives the bottom-right balloon. Raised at most once per launch, and only for a
+    /// release newer than both this copy and the last version the user silenced.
+    @Published var showUpdatePrompt = false
+    @Published private(set) var updateCheckInFlight = false
+    /// A manual check from Settings shows its outcome even when there is nothing to install.
+    @Published private(set) var updateCheckMessage: String?
+    /// Non-nil while `brew upgrade` runs, so the balloon can show progress instead of
+    /// offering the button twice.
+    @Published private(set) var updateUpgradeInFlight = false
+    /// What went wrong with the last upgrade attempt. Shown in the balloon, next to the
+    /// command the user can copy instead.
+    @Published private(set) var updateUpgradeFailure: String?
+
+    private let updateChecker = GitHubUpdateChecker()
+    private var updateTask: Task<Void, Never>?
+
+    /// The command the balloon offers to copy. Depends on how this copy was installed: an
+    /// install the cask owns upgrades, anything else is told how to move onto the cask.
+    var updateCommand: String { UpdatePlan.homebrewCommand(for: installOrigin) }
+
+    /// True when "Upgrade Now" is a real option rather than a command to copy.
+    var canRunUpdate: Bool { installOrigin == .homebrew && !updateUpgradeInFlight }
+
+    /// Decides the install origin once, then asks GitHub only when the daily window is open
+    /// and there is a version to compare against. The request is what makes macOS ask for
+    /// network access on a fresh install, so it happens while the window is on screen rather
+    /// than on the user's first captured flow.
+    func checkForUpdatesIfNeeded() {
+        installOrigin = InstallOriginDetector.origin(bundleURL: Bundle.main.bundleURL)
+        #if DEBUG
+        // `PROXYMAXX_UPDATE_SMOKE_TEST=1 Scripts/run.sh debug` pretends to be the cask
+        // install of an old release, so the balloon can be walked through end to end. Debug
+        // only: a release build has no path that skips the version gate.
+        // Both lines sit inside `#if DEBUG`, so a release build never reads the variable.
+        let smokeTest = UpdateCheckState.isSmokeTest
+        if smokeTest { installOrigin = .homebrew }
+        #else
+        let smokeTest = false
+        #endif
+        // A checkout or `swift run` has no released version to be behind.
+        guard let installed = smokeTest
+                ? ReleaseVersion("0.1.0")!
+                : InstalledVersion.comparableVersion() else {
+            installedVersion = nil
+            return
+        }
+        installedVersion = installed
+        guard smokeTest || UpdateCheckState.isCheckDue() else { return }
+        runUpdateCheck(manual: false)
+    }
+
+    /// The Settings button. Ignores the daily window but keeps a small cooldown, so a double
+    /// click cannot spend two of GitHub's 60 hourly requests.
+    func checkForUpdatesManually() {
+        guard !updateCheckInFlight else { return }
+        guard UpdateCheckState.isManualCheckAllowed() else {
+            updateCheckMessage = L10n.string("update.check.cooldown")
+            return
+        }
+        runUpdateCheck(manual: true)
+    }
+
+    /// Hides the balloon for this release only. A later release is offered again.
+    func dismissUpdatePrompt() {
+        if let release = availableUpdate {
+            UpdateCheckState.dismiss(version: release.version)
+        }
+        showUpdatePrompt = false
+    }
+
+    /// Opens the release page. Used both by the balloon's secondary action and by the
+    /// Settings card, and it is the only path that leaves the app for an update.
+    func openReleasePage() {
+        guard let release = availableUpdate else { return }
+        NSWorkspace.shared.open(release.pageURL)
+    }
+
+    /// Runs the upgrade through Homebrew and reports what happened. On success the running
+    /// process is the old binary, so the balloon tells the user to relaunch rather than
+    /// pretending this copy changed.
+    func runUpdateUpgrade() {
+        guard canRunUpdate else { return }
+        updateUpgradeInFlight = true
+        updateUpgradeFailure = nil
+        Task { @MainActor [weak self] in
+            let outcome = await Task.detached(priority: .userInitiated) {
+                HomebrewUpgrader.upgrade()
+            }.value
+            guard let self else { return }
+            updateUpgradeInFlight = false
+            if outcome.succeeded {
+                updateCheckMessage = L10n.string("update.upgrade.succeeded")
+                // The installed copy is now the new release: a relaunch is all that is left.
+                availableUpdate = nil
+                showUpdatePrompt = false
+                UpdateCheckState.recordCheck()
+            } else {
+                updateUpgradeFailure = outcome.output.isEmpty
+                    ? L10n.string("update.upgrade.failed")
+                    : outcome.output
+            }
+        }
+    }
+
+    private func runUpdateCheck(manual: Bool) {
+        guard let installed = installedVersion else { return }
+        updateCheckInFlight = true
+        if manual { updateCheckMessage = nil }
+        updateTask?.cancel()
+        updateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { updateCheckInFlight = false }
+            do {
+                let release = try await updateChecker.fetchLatestRelease()
+                guard !Task.isCancelled else { return }
+                UpdateCheckState.recordCheck()
+                if UpdateCheckState.shouldOffer(release, installed: installed) {
+                    availableUpdate = release
+                    if manual {
+                        updateCheckMessage = L10n.format("update.check.available", release.version.description)
+                    } else {
+                        showUpdatePrompt = true
+                    }
+                } else {
+                    availableUpdate = nil
+                    if manual {
+                        updateCheckMessage = L10n.format("update.check.current", installed.description)
+                    }
+                }
+            } catch {
+                // A failed check is not a user-facing problem: the balloon simply stays
+                // down, and the next launch's window tries again.
+                if manual {
+                    updateCheckMessage = L10n.string("update.check.failed")
+                }
+            }
+        }
+    }
+
     // MARK: - Android
 
     /// Which route the Android setup takes. See `AndroidInstallMode`.

@@ -152,7 +152,7 @@ let package = Package(
         ),
         .testTarget(name: "CodeGenKitTests", dependencies: ["CodeGenKit", "FlowKit"]),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
-        .testTarget(name: "SystemKitTests", dependencies: ["SystemKit"]),
+        .testTarget(name: "SystemKitTests", dependencies: ["SystemKit", "Branding"]),
         .testTarget(name: "LogKitTests", dependencies: ["LogKit"]),
         .testTarget(
             name: "SentryKitTests",

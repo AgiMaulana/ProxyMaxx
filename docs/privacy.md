@@ -168,3 +168,28 @@ and line numbers. `bundle-app.sh` compiles release builds with `-g` for this rea
 one that produced no dSYMs. The token is scoped to debug-information upload, is used only by
 that workflow step, and is never embedded in the app or the DMG. A release built without it
 still works; its crashes simply arrive unsymbolicated.
+
+## Update checks
+
+Once a day after launch, a release build asks GitHub for the newest release:
+
+```
+GET https://api.github.com/repos/AgiMaulana/ProxyMaxx/releases/latest
+User-Agent: ProxyMaxx/<installed version>
+```
+
+What leaves the machine is that request alone. No identifier, no install ID, no machine
+name, no captured traffic, and no settings are attached, and the response is only read for
+a version number and a release URL. The last successful response is kept in
+`~/Library/Application Support/ProxyMaxx/Updates/latest-release.json` so a launch that
+cannot reach GitHub can still name the release it already knew about; nothing else is stored.
+
+The check can be turned off completely by blocking `api.github.com` for ProxyMaxx in the
+firewall, and it is not part of the crash-reporting consent: opting out of Sentry leaves it
+running, and vice versa. Settings → Updates has a **Check Now** button, so the same request
+can be made on demand.
+
+Upgrading is never downloaded or installed by the app. An install that Homebrew owns shows
+**Upgrade Now**, which runs `brew upgrade --cask AgiMaulana/proxymaxx/proxymaxx` in the
+user's login shell; any other copy is shown the command to paste, plus a link to the release
+page. The app never replaces its own binary.

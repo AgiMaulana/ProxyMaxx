@@ -326,6 +326,25 @@
 "reporting.prompt.later" = "Not Now";
 "reporting.prompt.laterHelp" = "Not now. ProxyMaxx will ask again on the next launch.";
 
+/* MARK: Update prompt and Settings card */
+"update.prompt.title" = "A newer ProxyMaxx is available";
+"update.prompt.message" = "Version %@ is out; this copy is %@. The update installs through Homebrew, which replaces the app without touching your settings, captured sessions or proxy configuration.";
+"update.prompt.dismissHelp" = "Not now. ProxyMaxx will offer this version again on the next launch, and a newer release is always offered.";
+"update.prompt.releasePage" = "Release Notes";
+"update.prompt.upgrade" = "Upgrade Now";
+"update.prompt.upgrading" = "Upgrading with Homebrew…";
+"update.settings.title" = "Updates";
+"update.settings.installed" = "Installed version %@";
+"update.settings.available" = "Version %@ is available";
+"update.settings.unbundled" = "unbundled build";
+"update.settings.checkNow" = "Check Now";
+"update.check.available" = "Version %@ is available.";
+"update.check.current" = "You are on the newest version (%@).";
+"update.check.failed" = "Could not reach GitHub. Try again later, or open the release page.";
+"update.check.cooldown" = "Checked a moment ago. Try again in a minute.";
+"update.upgrade.succeeded" = "Updated. Quit and reopen ProxyMaxx to run the new version.";
+"update.upgrade.failed" = "Homebrew could not finish the upgrade. Run the command below in Terminal.";
+
 /* MARK: Android emulator guide */
 "android.emulator.title" = "Android Emulator Setup Guide";
 "android.emulator.intro" = "Install the ProxyMaxx certificate as a system CA and point the emulator's proxy here, so HTTPS traffic can be decrypted. On a Google APIs image this uses `adb root`. Android Studio Google Play AVDs ship a production-signed `adbd`, so there `adb root` is unavailable and the bundled, consent-based Magisk route is offered instead — Magisk compatibility has been tested on API 30-37.";

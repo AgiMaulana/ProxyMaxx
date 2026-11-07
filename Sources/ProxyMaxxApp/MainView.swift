@@ -62,13 +62,21 @@ struct MainView: View {
             CommandLineToolPanelView().environmentObject(model)
         }
         .overlay(alignment: .bottomTrailing) {
+            // One balloon at a time: the first-run error-reporting question comes first, and
+            // an update offer waits until that launch has asked it. Both read as the same
+            // gesture in the same corner, so stacking them would be two things to dismiss.
             if model.showErrorReportingPrompt {
                 ErrorReportingPromptView()
+                    .padding(16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if model.showUpdatePrompt {
+                UpdatePromptView()
                     .padding(16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.showErrorReportingPrompt)
+        .animation(.easeOut(duration: 0.2), value: model.showUpdatePrompt)
         .alert("common.error", isPresented: errorBinding) {
             Button("common.ok") { model.lastError = nil }
         } message: {
@@ -94,6 +102,7 @@ struct MainView: View {
             model.applyCommandLineOptions()
             model.beginExternalOwnerWatch()
             model.presentErrorReportingPromptIfNeeded()
+            model.checkForUpdatesIfNeeded()
         }
     }
 
@@ -589,6 +598,192 @@ struct MainView: View {
         guard let total = flow.timing.total else { return "…" }
         if total < 1 { return String(format: "%.0f ms", total * 1000) }
         return String(format: "%.2f s", total)
+    }
+}
+
+/// The bottom-right balloon that offers a newer release.
+///
+/// It never downloads or swaps the app: ProxyMaxx is ad-hoc signed and the cask is not
+/// notarised, so the swap belongs to Homebrew. An install the cask owns gets "Upgrade Now";
+/// anything else gets the command to copy and the release page, because a hand-copied app
+/// has no package manager to ask.
+struct UpdatePromptView: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
+                Text("update.prompt.title")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button {
+                    model.dismissUpdatePrompt()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("update.prompt.dismissHelp")
+                .accessibilityLabel("update.prompt.dismissHelp")
+            }
+
+            if let release = model.availableUpdate {
+                Text(L10n.format(
+                    "update.prompt.message",
+                    release.version.description,
+                    model.installedVersion?.description ?? "—"
+                ))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            commandRow
+
+            if let failure = model.updateUpgradeFailure {
+                Text(failure)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let message = model.updateCheckMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                Button("update.prompt.releasePage") { model.openReleasePage() }
+                    .buttonStyle(.bordered)
+                Spacer(minLength: 12)
+                if model.canRunUpdate {
+                    Button("update.prompt.upgrade") { model.runUpdateUpgrade() }
+                        .buttonStyle(.borderedProminent)
+                        .fixedSize()
+                } else if model.updateUpgradeInFlight {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("update.prompt.upgrading").font(.callout)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 440, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary)
+        }
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("update.prompt.title")
+    }
+
+    /// The exact command, selectable, with a copy button. Shown for every origin: even an
+    /// install the cask owns may fail to upgrade, and this is what it falls back to.
+    private var commandRow: some View {
+        HStack(spacing: 8) {
+            Text(model.updateCommand)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+            Button("common.copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(model.updateCommand, forType: .string)
+            }
+            .controlSize(.small)
+        }
+    }
+}
+
+/// The same offer, in Settings, so a dismissed balloon is not the end of the story: the
+/// version row and the check button stay available for the user to come back to.
+///
+/// This pane scrolls rather than growing, so the card keeps one extra line at most: the
+/// available version replaces the "installed" line instead of being appended to it.
+struct UpdateSettingsCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        ToolCard(spacing: 10) {
+            HStack(alignment: .center) {
+                Text("update.settings.title")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                Spacer(minLength: 8)
+                if model.updateCheckInFlight {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("update.settings.checkNow") { model.checkForUpdatesManually() }
+                        .controlSize(.small)
+                }
+            }
+
+            if let release = model.availableUpdate {
+                Text(L10n.format("update.settings.available", release.version.description))
+                    .font(.callout.weight(.semibold))
+            } else {
+                Text(L10n.format(
+                    "update.settings.installed",
+                    model.installedVersion?.description ?? L10n.string("update.settings.unbundled")
+                ))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                if let message = model.updateCheckMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if model.installedVersion != nil {
+                HStack(spacing: 6) {
+                    Text(model.updateCommand)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(model.updateCommand, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("common.copy")
+                    .accessibilityLabel("common.copy")
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    if model.canRunUpdate {
+                        Button("update.prompt.upgrade") { model.runUpdateUpgrade() }
+                            .controlSize(.small)
+                    }
+                    if model.availableUpdate != nil {
+                        Button("update.prompt.releasePage") { model.openReleasePage() }
+                            .controlSize(.small)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+
+            if let failure = model.updateUpgradeFailure {
+                Text(failure)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(4)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
