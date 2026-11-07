@@ -292,8 +292,17 @@
 "settings.errorReportingHint" = "When enabled, ProxyMaxx sends sanitized crash and application error reports to Sentry. Reporting is off by default. Intercepted traffic, headers, cookies, credentials, request URLs and local log files are never sent.";
 "settings.errorReportingUnavailable" = "Error reporting is not configured in this build.";
 "settings.privacyInfo" = "Privacy information";
+"settings.errorReportingAsked" = "ProxyMaxx asked about error reporting when it last started, so it will not ask again. Turn it on here at any time.";
 "settings.about" = "About";
 "settings.aboutText" = "ProxyMaxx is a from-scratch HTTP/HTTPS debugging proxy. All features are included; there is no licence or paid tier.";
+
+/* MARK: Error reporting prompt */
+"reporting.prompt.title" = "Help fix ProxyMaxx crashes?";
+"reporting.prompt.message" = "Error reporting is off. If you turn it on, ProxyMaxx sends sanitized reports when the app crashes or a proxy operation fails. Intercepted traffic, headers, cookies, credentials, request URLs and log files are never sent. You can turn it off again in Settings → Privacy & Diagnostics.";
+"reporting.prompt.accept" = "Turn On Error Reporting";
+"reporting.prompt.decline" = "Don't Ask Again";
+"reporting.prompt.later" = "Not Now";
+"reporting.prompt.laterHelp" = "Not now. ProxyMaxx will ask again on the next launch.";
 
 /* MARK: Android emulator guide */
 "android.emulator.title" = "Android Emulator Setup Guide";

@@ -28,9 +28,21 @@ Before consent, ProxyMaxx does not:
 - queue events for later transmission;
 - collect telemetry in the background.
 
-Local logging continues normally. To enable reporting, open **Settings → Privacy &
-Diagnostics** and turn on **Error reporting**. Turn it off again to stop new events. The
-setting is stored in `UserDefaults` under `ProxyMaxxErrorReportingEnabled`.
+Local logging continues normally. The first launch that can report offers the choice as a
+balloon in the bottom-right corner of the main window, with the same explanation as the
+Settings pane:
+
+- **Turn On Error Reporting** consents immediately and switches the setting on;
+- **Not Now** leaves reporting off and asks again on the next launch;
+- **Don't Ask Again** leaves reporting off and stops the balloon for good;
+- closing the balloon is the same as **Not Now**.
+
+Once the question is answered, the balloon does not return. Reporting can be turned on later
+under **Settings → Privacy & Diagnostics** by turning on **Error reporting**; turning it off
+again stops new events. The choice is stored in `UserDefaults` under
+`ProxyMaxxErrorReportingEnabled`, and the "don't ask again" answer under
+`ProxyMaxxErrorReportingAsked`. Enabling reporting in Settings counts as answering, so a
+later launch never asks again.
 
 Disabling stops new reports immediately and closes the SDK, which flushes what the SDK
 permits. It cannot recall events that were already transmitted. Previously sent events are

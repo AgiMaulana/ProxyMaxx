@@ -157,6 +157,31 @@ final class CrashReportingServiceTests: XCTestCase {
         XCTAssertFalse(CrashReportingConsent.isEnabled(in: defaults))
     }
 
+    func testPromptIsDueUntilTheUserAnswers() throws {
+        let suite = "CrashReportingConsentTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertTrue(CrashReportingConsent.isPromptDue(in: defaults))
+
+        CrashReportingConsent.setAsked(in: defaults)
+        XCTAssertFalse(CrashReportingConsent.isPromptDue(in: defaults))
+        XCTAssertFalse(CrashReportingConsent.isEnabled(in: defaults), "Declining must not enable reporting")
+    }
+
+    func testDisablingAfterConsentDoesNotPromptAgain() throws {
+        let suite = "CrashReportingConsentTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        CrashReportingConsent.setEnabled(true, in: defaults)
+        XCTAssertTrue(CrashReportingConsent.wasAsked(in: defaults))
+
+        // Turning it back off in Settings is a decision, not an invitation to ask again.
+        CrashReportingConsent.setEnabled(false, in: defaults)
+        XCTAssertFalse(CrashReportingConsent.isPromptDue(in: defaults))
+    }
+
     func testConfiguredBeforeSendSanitizesEvents() throws {
         let backend = FakeSentryBackend()
         let service = SentryCrashReportingService(dsn: validDSN, backend: backend)

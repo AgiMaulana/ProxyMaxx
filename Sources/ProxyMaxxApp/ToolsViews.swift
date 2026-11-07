@@ -366,6 +366,12 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if model.errorReportingDeclinedAtLaunch {
+                    Text("settings.errorReportingAsked")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Button("settings.privacyInfo") {
                     if let url = URL(string: "https://github.com/AgiMaulana/ProxyMaxx/blob/main/docs/privacy.md") {
                         NSWorkspace.shared.open(url)

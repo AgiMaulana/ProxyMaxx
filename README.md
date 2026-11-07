@@ -348,8 +348,9 @@ not UI copy.
 ### Privacy and crash reporting
 
 `LogKit` writes detailed logs locally and always works. Optional remote error reporting uses
-Sentry, is **off by default**, and only starts after the user enables it in
-**Settings → Privacy & Diagnostics**. Events pass through a centralized sanitizer; intercepted
+Sentry, is **off by default**, and only starts after the user enables it — either from the
+first-launch balloon in the bottom-right corner or in **Settings → Privacy & Diagnostics**.
+Events pass through a centralized sanitizer; intercepted
 traffic, headers, cookies, credentials, request URLs and log files are never sent. Two Sentry
 environments keep the data apart: `development` for debug builds and `production` for release
 bundles. See [`docs/privacy.md`](docs/privacy.md) for the full collection policy, the excluded

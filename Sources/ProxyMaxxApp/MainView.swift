@@ -60,6 +60,14 @@ struct MainView: View {
         .sheet(isPresented: $model.showCommandLinePanel) {
             CommandLineToolPanelView().environmentObject(model)
         }
+        .overlay(alignment: .bottomTrailing) {
+            if model.showErrorReportingPrompt {
+                ErrorReportingPromptView()
+                    .padding(16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.showErrorReportingPrompt)
         .alert("common.error", isPresented: errorBinding) {
             Button("common.ok") { model.lastError = nil }
         } message: {
@@ -84,6 +92,7 @@ struct MainView: View {
             model.detectStaleSystemProxy()
             model.applyCommandLineOptions()
             model.beginExternalOwnerWatch()
+            model.presentErrorReportingPromptIfNeeded()
         }
     }
 
@@ -579,5 +588,71 @@ struct MainView: View {
         guard let total = flow.timing.total else { return "…" }
         if total < 1 { return String(format: "%.0f ms", total * 1000) }
         return String(format: "%.2f s", total)
+    }
+}
+
+/// The bottom-right balloon that asks about error reporting, once, on the launches where
+/// that question is still open.
+///
+/// The copy is the point of the balloon, so it states what leaves the machine and what does
+/// not, and links to the same Privacy information page Settings offers. Every answer is a
+/// plain button: nothing is preselected, and closing the balloon with the ✕ only postpones
+/// the question to the next launch, so a stray click never becomes a permanent "no".
+struct ErrorReportingPromptView: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "ladybug.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text("reporting.prompt.title")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button {
+                    model.dismissErrorReportingPrompt()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("reporting.prompt.laterHelp")
+                .accessibilityLabel("reporting.prompt.laterHelp")
+            }
+            Text("reporting.prompt.message")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("settings.privacyInfo") {
+                if let url = URL(string: "https://github.com/AgiMaulana/ProxyMaxx/blob/main/docs/privacy.md") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.link)
+            .controlSize(.small)
+
+            // Two quiet answers, one prominent. Enabling starts reporting immediately and
+            // moves the Settings switch with it, so the two never disagree.
+            HStack(spacing: 8) {
+                Button("reporting.prompt.decline") { model.declineErrorReportingPrompt() }
+                    .buttonStyle(.bordered)
+                Button("reporting.prompt.later") { model.dismissErrorReportingPrompt() }
+                    .buttonStyle(.bordered)
+                    .help("reporting.prompt.laterHelp")
+                Spacer(minLength: 12)
+                Button("reporting.prompt.accept") { model.acceptErrorReportingPrompt() }
+                    .buttonStyle(.borderedProminent)
+                    .fixedSize()
+            }
+        }
+        .padding(16)
+        .frame(width: 440, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary)
+        }
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("reporting.prompt.title")
     }
 }
