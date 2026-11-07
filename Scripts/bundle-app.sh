@@ -40,7 +40,11 @@ cd "$ROOT"
 source "$ROOT/Scripts/macos-sdk-flags.sh"
 
 echo "==> Building ($CONFIGURATION)"
-swift build -c "$CONFIGURATION" "${MACOS_SDK_LINK_FLAGS[@]}"
+# Release builds must carry DWARF: Sentry cannot symbolicate a crash without the dSYM that
+# matches the binary's UUID, and SwiftPM's release configuration passes no `-g`, so the
+# optimized binary would otherwise have no debug info and no dSYM at all. `-g` costs only
+# build size, never runtime, and the human-readable part of crash reports depends on it.
+swift build -c "$CONFIGURATION" -Xswiftc -g "${MACOS_SDK_LINK_FLAGS[@]}"
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 
 # Companions are generated, never checked in. Staging them here rather than trusting a
@@ -158,6 +162,21 @@ codesign --force --sign - "$APP/Contents/Resources/proxymaxx-cli" >/dev/null 2>&
 # Ad-hoc sign so macOS will launch it locally.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "    (ad-hoc signing skipped)"
 
+# The dSYMs are build products, not bundle contents: they must stay out of the .app (and out
+# of the DMG) but travel with the build so the release job can upload them to Sentry. They
+# live beside the bundle in `dist/dSYMs`, keyed by the same UUID the binary records.
+echo "==> Collecting dSYMs"
+rm -rf "$ROOT/dist/dSYMs"
+mkdir -p "$ROOT/dist/dSYMs"
+while IFS= read -r dsym; do
+    ditto "$dsym" "$ROOT/dist/dSYMs/$(basename "$dsym")"
+done < <(find "$BIN_PATH" -maxdepth 1 -name "*.dSYM")
+if [[ "$CONFIGURATION" == "release" && -z "$(ls -A "$ROOT/dist/dSYMs")" ]]; then
+    echo "❌ The release build produced no dSYMs, so Sentry could not symbolicate its crashes." >&2
+    exit 1
+fi
+echo "    $(find "$ROOT/dist/dSYMs" -name DWARF -type d | wc -l | tr -d ' ') dSYM bundle(s) in dist/dSYMs"
+
 # Everything above inspects staged sources, and a copy can still leave the bundle short
 # or with a nested binary whose signature no longer matches. Assert the artifact itself,
 # after sealing, so a broken bundle fails here instead of on someone's Mac.
@@ -192,11 +211,35 @@ check_present "Contents/Resources/Android/install_certificate_android_emulator.s
 check_present "Contents/Resources/AppIcon.icns"
 check_present "Contents/Resources/en.lproj/Localizable.strings"
 
+# A dSYM whose UUID no longer matches the binary uploads cleanly and symbolicate nothing,
+# so a release fails here rather than shipping unsymbolicated crash reports. Read the UUID
+# from LC_UUID with otool: `dwarfdump --uuid` is the Apple tool's flag, and some toolchains
+# `dwarfdump` is llvm-dwarfdump, which does not accept it.
+macho_uuid() {
+    otool -l "$1" 2>/dev/null | awk '/cmd LC_UUID/{getline; getline; print $2}' | tr -d '-'
+}
+
+check_dsym() {
+    local binary="$1" dsym="$2" elf="$3" want have
+    # `binary` is bundle-relative (as with check_present), so the existence test has to look
+    # inside the .app; testing it against the checkout would find nothing and skip the check.
+    [[ -e "$APP/$binary" ]] || return
+    # The DWARF file inside a dSYM is named after the executable, not the .dSYM bundle, so the
+    # two names are separate arguments rather than one derived from the other.
+    want="$(macho_uuid "$APP/$binary")"
+    [[ -n "$want" ]] || { problems+=("binary records no UUID: $binary"); return; }
+    have="$(macho_uuid "$ROOT/dist/dSYMs/$dsym/Contents/Resources/DWARF/$elf")"
+    [[ "$have" == "$want" ]] || problems+=("no dSYM matches $binary (uuid $want, dSYM $dsym has ${have:-none})")
+}
+
 # The browser bridge and the tunnel APK are optional only for debug builds: a release
 # without them is a release with a companion the user was promised.
 if [[ "$CONFIGURATION" == "release" ]]; then
     check_present "Contents/MacOS/proxymaxx-browser-host"
     check_present "Contents/Resources/Android/proxymaxx-vpn.apk"
+    check_dsym "Contents/MacOS/ProxyMaxx" "ProxyMaxxApp.dSYM" "ProxyMaxxApp"
+    check_dsym "Contents/Resources/proxymaxx-cli" "proxymaxx-cli.dSYM" "proxymaxx-cli"
+    check_dsym "Contents/MacOS/proxymaxx-browser-host" "proxymaxx-browser-host.dSYM" "proxymaxx-browser-host"
 fi
 
 check_signature "Contents/MacOS/ProxyMaxx"
@@ -219,6 +262,9 @@ if (( ${#problems[@]} > 0 )); then
     exit 1
 fi
 echo "    all companions present; signatures valid; linked against SDK $MACOS_SDK_VERSION"
+if [[ -d "$ROOT/dist/dSYMs" ]]; then
+    echo "    dSYMs in dist/dSYMs match the bundled binaries"
+fi
 
 echo "==> Done: $APP"
 echo "    Open with: open \"$APP\""

@@ -317,7 +317,10 @@ which needs `TAP_GITHUB_TOKEN` because `GITHUB_TOKEN` cannot write to another re
 Optional error reporting reads its public DSN from the `SENTRY_DSN` repository secret and
 embeds it in the bundle; without the secret the build simply has no reporting endpoint.
 Events are tagged with a Sentry environment: `production` for release bundles, `development`
-for local debug builds.
+for local debug builds. Crash reports are only readable when Sentry has the matching `dSYM`s,
+so the release build compiles with debug info and the workflow uploads every dSYM to the
+project named by the same DSN, authenticating with `SENTRY_AUTH_TOKEN`. That token is a real
+credential, unlike the DSN: it is used only by the upload step and never reaches the bundle.
 
 The tap lives at [AgiMaulana/homebrew-proxymaxx](https://github.com/AgiMaulana/homebrew-proxymaxx).
 Its `Casks/proxymaxx.rb` is generated: edit
