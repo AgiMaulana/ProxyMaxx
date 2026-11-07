@@ -1283,14 +1283,19 @@ final class AppModel: ObservableObject {
             isRunning = running
             self.port = port
         case .diagnostic(let message):
-            log(message)
+            // ProxyKit already writes these through swift-log, so only mirror the UI feed.
+            recordActivity(message)
         }
     }
 
     private func log(_ message: String) {
+        recordActivity(message)
+        LogKit.record(message, component: "App")
+    }
+
+    private func recordActivity(_ message: String) {
         let stamped = "[\(Self.timeFormatter.string(from: Date()))] \(message)"
         activityLog.append(stamped)
-        LogKit.record(message, component: "App")
         if activityLog.count > 500 {
             activityLog.removeFirst(activityLog.count - 500)
         }
