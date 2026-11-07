@@ -113,7 +113,8 @@ enum Help {
                            Print captured flows from the session log, narrowed exactly
                            like the app's filter bar. --follow tails new flows until
                            interrupted or the engine stops, printing each flow once from
-                           its closing snapshot. One NDJSON object per line, the same
+                           its closing snapshot; while an engine runs it skips what the
+                           session already captured. One NDJSON object per line, the same
                            shape `serve` streams; --text prints one line per flow.
                            --fail-on-match exits 4 after printing when any flow matched.
       proxymaxx-cli status                 Print owner/pid/ports of the running proxy.

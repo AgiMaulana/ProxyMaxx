@@ -210,10 +210,20 @@ public enum SessionLog {
     /// It also survives compaction: the log may rewrite itself smaller, which sends the
     /// byte offset back to zero, and the ids already surfaced are what stop the replayed
     /// lines from being printed a second time.
+    ///
+    /// Where it starts is the caller's choice. `fromStart: false` is the attach mode,
+    /// for a reader joining a session still being written: the log already holds those
+    /// flows, so reprinting them would show them twice, once from history and once from
+    /// live traffic. Only snapshots appended after the first poll are surfaced.
     public struct Follower {
         public let url: URL
         /// Byte offset into the log, advanced on every poll.
         private var offset: UInt64 = 0
+        /// When set, everything already in the log is treated as history captured before
+        /// the reader attached. The first poll moves the offset past it without surfacing
+        /// anything, and a flow that was mid-flight at that moment is not picked up again
+        /// by a later snapshot, so a resumed flow arrives once, whole.
+        private var skipRetained = false
         /// Flows seen but not yet closed, newest snapshot per id, in the order they first
         /// appeared. Closed flows are removed as they are surfaced.
         private var inFlight: [UUID: Flow] = [:]
@@ -223,8 +233,12 @@ public enum SessionLog {
         /// Ids already returned, so a replay after compaction cannot print them again.
         private var surfaced: Set<UUID> = []
 
-        public init(url: URL = SessionLog.defaultURL) {
+        /// `fromStart` reads the session already in the log, for inspecting a capture that
+        /// has finished. A live reader passes `false`: the engine has already recorded
+        /// those flows for the session, and printing them again reads as new traffic.
+        public init(url: URL = SessionLog.defaultURL, fromStart: Bool = true) {
             self.url = url
+            skipRetained = !fromStart
         }
 
         /// Read whatever is new and return the flows that closed since the last poll, in
@@ -232,6 +246,16 @@ public enum SessionLog {
         public mutating func poll() -> [Flow] {
             let (flows, nextOffset) = SessionLog.read(url: url, fromOffset: offset)
             offset = nextOffset
+
+            if skipRetained {
+                // The retained prefix is history, whether this read found complete lines
+                // or landed mid-line. Dropping it means a flow still streaming at attach
+                // is not surfaced from its retained half, and its closing snapshot later
+                // reads as that flow's first appearance.
+                skipRetained = false
+                return []
+            }
+
             var closed: [Flow] = []
             for flow in flows {
                 // A flow already surfaced is a replayed line (compaction sent the offset
