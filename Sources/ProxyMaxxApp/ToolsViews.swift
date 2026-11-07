@@ -352,6 +352,27 @@ struct SettingsView: View {
                         .font(.callout)
                 }
             }
+            section("settings.privacy") {
+                Toggle("settings.errorReporting", isOn: $model.errorReportingEnabled)
+                    .toggleStyle(.switch)
+                    .disabled(!model.isCrashReportingAvailable)
+                if !model.isCrashReportingAvailable {
+                    Text("settings.errorReportingUnavailable")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("settings.errorReportingHint")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("settings.privacyInfo") {
+                    if let url = URL(string: "https://github.com/AgiMaulana/ProxyMaxx/blob/main/docs/privacy.md") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.link)
+            }
             section("settings.about") {
                 Text(ProxyMaxxAbout.summary)
                     .font(.callout)

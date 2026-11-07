@@ -287,6 +287,11 @@
 "settings.portHint" = "Change ports while the proxy is stopped. If the SOCKS5 port is in use, the next free port is used.";
 "settings.certificate" = "Certificate";
 "settings.commonName" = "Common name";
+"settings.privacy" = "Privacy & Diagnostics";
+"settings.errorReporting" = "Error reporting";
+"settings.errorReportingHint" = "When enabled, ProxyMaxx sends sanitized crash and application error reports to Sentry. Reporting is off by default. Intercepted traffic, headers, cookies, credentials, request URLs and local log files are never sent.";
+"settings.errorReportingUnavailable" = "Error reporting is not configured in this build.";
+"settings.privacyInfo" = "Privacy information";
 "settings.about" = "About";
 "settings.aboutText" = "ProxyMaxx is a from-scratch HTTP/HTTPS debugging proxy. All features are included; there is no licence or paid tier.";
 
