@@ -362,6 +362,7 @@
 "android.emulator.installCta" = "Install certificate & proxy";
 "android.emulator.revertAll" = "Revert all changes";
 "android.emulator.showCommand" = "Show Command";
+"android.emulator.hideCommand" = "Hide Command";
 "android.emulator.copyCommand" = "Copy command";
 "android.emulator.installed" = "Install complete. The certificate and proxy are set up on this emulator.";
 "android.emulator.installing" = "Installing…";

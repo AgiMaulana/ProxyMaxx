@@ -291,7 +291,16 @@ private struct InstallCard: View {
                 .disabled(model.androidBusy)
 
             if model.androidMode != .manual {
-                Button("android.emulator.showCommand") { showManualCommand.toggle() }
+                Button {
+                    showManualCommand.toggle()
+                } label: {
+                    Text(showManualCommand
+                         ? "android.emulator.hideCommand"
+                         : "android.emulator.showCommand")
+                }
+                .accessibilityLabel(Text(L10n.string(showManualCommand
+                    ? "android.emulator.hideCommand"
+                    : "android.emulator.showCommand")))
                     .buttonStyle(.link)
                     .controlSize(.large)
             }
