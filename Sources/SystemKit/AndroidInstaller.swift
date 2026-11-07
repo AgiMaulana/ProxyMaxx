@@ -146,8 +146,14 @@ public enum AndroidInstaller {
             arguments.append("--uninstall-vpn")
             // Only offered when the Magisk assets are actually present: a revert must not
             // promise to restore something this build cannot.
-            if request.enableMagisk, paths.magisk != nil {
-                arguments.append("--restore-magisk")
+            // The restore runs the same helper the install used, and the revert script names it
+            // explicitly: an unset path is reported as a missing helper instead of a restore.
+            if request.enableMagisk, let magisk = paths.magisk {
+                arguments += [
+                    "--restore-magisk",
+                    "--magisk-script", magisk.script.path,
+                    "--magisk-state-dir", request.stateDirectory.appendingPathComponent("magisk").path,
+                ]
             }
         } else if let tunnelAPK = paths.tunnelAPK {
             arguments += ["--vpn-apk", tunnelAPK.path]

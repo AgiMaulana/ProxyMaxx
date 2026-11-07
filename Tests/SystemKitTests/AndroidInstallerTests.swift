@@ -132,6 +132,11 @@ final class AndroidInstallerTests: XCTestCase {
         XCTAssertFalse(arguments.contains("-p"))
         XCTAssertFalse(arguments.contains("--vpn-apk"))
         XCTAssertFalse(arguments.contains("--enable-magisk"))
+        // The restore runs the bundled helper, so revert has to name it and its state
+        // directory. Without the path the script reports a missing helper and exits 1.
+        XCTAssertTrue(arguments.contains("--magisk-script"))
+        XCTAssertTrue(arguments.contains(magisk().script.path))
+        XCTAssertTrue(arguments.contains("--magisk-state-dir"))
     }
 
     /// A build without the Magisk assets must not promise a restore it cannot perform.
@@ -140,6 +145,7 @@ final class AndroidInstallerTests: XCTestCase {
 
         XCTAssertTrue(arguments.contains("--uninstall-vpn"))
         XCTAssertFalse(arguments.contains("--restore-magisk"))
+        XCTAssertFalse(arguments.contains("--magisk-script"))
     }
 
     func testIncludePhysicalIsOptIn() {
