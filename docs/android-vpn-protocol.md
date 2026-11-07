@@ -60,6 +60,8 @@ The tunnel's packet router applies these rules:
   resolves it, not the device.
 - The outbound socket is `protect()`ed and the app excludes itself with
   `addDisallowedApplication`, so the tunnel never captures its own traffic.
+- **Loopback is exempt.** Traffic to or from `127.0.0.0/8` (or `::1`) is never routed to the
+  proxy, never relayed directly and never dropped; the device's own stack completes it.
 - TLS host names are recovered from the ClientHello for flow naming — the tunnel does **not**
   decrypt anything.
 
@@ -72,6 +74,7 @@ The tunnel's packet router applies these rules:
 | UDP | Dialled directly, per flow, and **not** proxied — the Mac's SOCKS listener is TCP-only. |
 | UDP 443 (QUIC) | Dropped, so HTTP/3 falls back to TCP where it can be inspected. |
 | UDP 53 (DNS) | Depends on the VPN's DNS configuration — see the note below. |
+| Loopback, TCP or UDP | Exempt, so on-device servers stay reachable — see below. |
 
 ## The tun interface
 
@@ -88,6 +91,17 @@ Two decisions are worth recording, both found by running the tunnel:
   all. The tunnel declares the resolvers of the *underlying* network instead and excludes
   their addresses from the tun, so resolution never depends on a relay that is not meant
   to carry it.
+- **Loopback.** The tunnel advertises `0.0.0.0/0`, so it also captures a client's connections
+  to the device's own `localhost`. Relaying them cannot work. The relay socket is dialled from
+  the tunnel app's side — `protect()` followed by a direct connect, the only portable way —
+  and a socket's path is fixed by whoever dials it, so it reaches *that* side's loopback, not
+  the peer the client asked for. A relayed localhost connection therefore fails at once
+  (`ECONNREFUSED`, `os error 61` on macOS). Tools that drive an app through an on-device
+  server are broken by that: Maestro's `maestro-app/driver` gRPC server, reached over
+  `adb forward`, dies with `DeviceServerDiedException` on its first `deviceInfo` call. The
+  tunnel therefore leaves loopback traffic alone — checked at both ends of the packet — and
+  lets the client's own connection use the `local 127.0.0.0/8 … dev lo` route Android already
+  has. None of it has network traffic worth showing in the proxy.
 - **Going foreground.** A started foreground service is killed if it has not called
   `startForeground()` within a few seconds, and `establish()` is a round trip through netd.
   Calling `startForeground()` afterwards is survivable when a person taps a button, but not
