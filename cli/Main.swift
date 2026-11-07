@@ -3,6 +3,7 @@ import ProxyKit
 import RuleKit
 import CertKit
 import SystemKit
+import LogKit
 
 /// Command dispatch for the `proxymaxx-cli` front-end. Every command touches the same libraries the
 /// GUI app does — ProxyKit engines, CertKit certificates, RuleKit rules — so behaviour is
@@ -11,6 +12,7 @@ import SystemKit
 @MainActor
 struct ProxyMaxxCLI {
     static func main() async {
+        LogKit.bootstrap()
         let arguments = Arguments(CommandLine.operandArguments)
         if arguments.has("h") || arguments.has("help") {
             print(Help.text)
@@ -31,6 +33,8 @@ struct ProxyMaxxCLI {
                 try await FlowsCommand.run(arguments.after(command))
             case "status":
                 StatusCommand.printCurrent()
+            case "report":
+                ReportCommand.run(arguments.after(command))
             case "rule":
                 try await RuleCommand.run(arguments.after(command))
             case "rules":
@@ -93,6 +97,7 @@ struct ProxyMaxxCLI {
         cert dir   \(CertificateStorage.defaultDirectory.path)
         ca pem     \(CertificateStorage.defaultDirectory.appendingPathComponent(CertificateStorage.certificateFileName).path)
         session    \(SessionLog.defaultURL.path)
+        log        \(LogKit.logFile.url.path)
         """)
     }
 }

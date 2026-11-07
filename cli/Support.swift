@@ -1,6 +1,8 @@
 import Foundation
 import Dispatch
 import RuleKit
+import LogKit
+import Logging
 
 /// Shared argument-parsing helpers for the CLI. Hand-rolled on purpose: a debugging
 /// proxy that pulls in a package manager's worth of argument libraries does not earn it.
@@ -47,7 +49,7 @@ struct Arguments {
     private static let booleanOptions: Set<String> = [
         "activate", "detach", "errors-only", "fail-on-match", "follow", "force",
         "h", "help", "host-only", "include-physical", "magisk", "no-magisk",
-        "pem", "pinned", "print", "remove", "saved", "text",
+        "open", "pem", "pinned", "print", "remove", "saved", "text",
     ]
 
     /// The option name behind a token, or nil when the token is a positional value.
@@ -115,6 +117,10 @@ enum Help {
                            shape `serve` streams; --text prints one line per flow.
                            --fail-on-match exits 4 after printing when any flow matched.
       proxymaxx-cli status                 Print owner/pid/ports of the running proxy.
+      proxymaxx-cli report [--open | --print]
+                           Print the tail of the newest local log (Logs/0.log). --open
+                           opens a prefilled GitHub new-issue page carrying it; --print
+                           prints that page's URL instead.
       proxymaxx-cli proxy on | off | status   Manage the macOS system HTTP/HTTPS proxy.
       proxymaxx-cli proxy-host             Print local proxy IP and port as JSON for scripts.
       proxymaxx-cli maplocal on | off      Toggle the Map Local tool.
@@ -219,10 +225,12 @@ enum ExitCode {
 /// polluting the NDJSON flow stream on stdout.
 func note(_ message: String) {
     FileHandle.standardError.write(Data("[proxymaxx-cli] \(message)\n".utf8))
+    LogKit.record(message, component: "CLI")
 }
 
 func fail(_ message: String, usage: Bool = false) -> Never {
-    note("error: \(message)")
+    FileHandle.standardError.write(Data("[proxymaxx-cli] error: \(message)\n".utf8))
+    LogKit.record("error: \(message)", component: "CLI", level: .error)
     if usage { print(Help.text) }
     exit(usage ? ExitCode.usage : ExitCode.failure)
 }

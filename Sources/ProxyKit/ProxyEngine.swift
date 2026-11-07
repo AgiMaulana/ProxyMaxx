@@ -169,6 +169,14 @@ public final class ProxyEngine: @unchecked Sendable {
 
     public func start() throws {
         guard serverChannel == nil else { return }
+        logger.info(
+            "starting proxy",
+            metadata: [
+                "host": .string(configuration.host),
+                "port": .stringConvertible(configuration.port),
+                "connect-timeout-seconds": .stringConvertible(configuration.connectTimeoutSeconds),
+            ]
+        )
 
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
@@ -234,6 +242,7 @@ public final class ProxyEngine: @unchecked Sendable {
 
     public func stop() {
         guard let channel = serverChannel else { return }
+        logger.info("stopping proxy", metadata: ["port": .stringConvertible(configuration.port)])
         try? channel.close().wait()
         serverChannel = nil
         if let socksChannel {
@@ -493,6 +502,9 @@ public final class ProxyEngine: @unchecked Sendable {
 
     func emit(_ event: ProxyEvent) {
         if case .diagnostic(let message) = event {
+            // Diagnostics are the engine's only failure signal outside the event stream,
+            // so mirror them into the structured log before the front-end sees them.
+            logger.warning("\(message)")
             FileHandle.standardError.write(Data("[diag] \(message)\n".utf8))
         }
         onEvent?(event)

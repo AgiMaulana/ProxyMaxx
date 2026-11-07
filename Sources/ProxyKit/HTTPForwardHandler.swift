@@ -291,6 +291,7 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
             upstreamChannel.write(NIOAny(HTTPClientRequestPart.body(.byteBuffer(buffer))), promise: nil)
             return upstreamChannel.writeAndFlush(NIOAny(HTTPClientRequestPart.end(nil)))
         }.whenFailure { error in
+            engine.emit(.diagnostic("upstream connect failed [\(resolved.host):\(resolved.port)]: \(error)"))
             recorder.fail("\(error)")
             self.respond(on: channel, status: .badGateway, message: "Upstream error: \(error)")
         }

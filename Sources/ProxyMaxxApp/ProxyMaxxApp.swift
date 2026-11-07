@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LogKit
 
 /// Copy shared by the Settings pane and the standard About panel, so the two cannot drift.
 enum ProxyMaxxAbout {
@@ -49,6 +50,12 @@ struct ProxyMaxxApp: App {
                 Button("menu.about") { ProxyMaxxAbout.showPanel() }
             }
             CommandGroup(after: .appInfo) {
+                Button("menu.reportIssue") {
+                    IssueReporter.openIssuePage()
+                    NSWorkspace.shared.activateFileViewerSelecting([LogKit.logFile.url])
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+
                 Button("menu.clearSession") { model.clearSession() }
                     .keyboardShortcut("k", modifiers: [.command, .shift])
 
