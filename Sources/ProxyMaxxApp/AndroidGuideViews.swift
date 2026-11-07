@@ -72,7 +72,10 @@ private struct TargetCard: View {
             if model.androidDevices.isEmpty {
                 noDeviceRow
             } else {
-                DevicePickerList()
+                HStack(spacing: 10) {
+                    DevicePickerList()
+                    refreshButton
+                }
             }
 
             if let note = imageNote {
@@ -121,9 +124,8 @@ private struct TargetCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("common.refresh") { model.refreshAndroidDevices() }
+            refreshButton
                 .buttonStyle(.borderedProminent)
-                .controlSize(.large)
         }
         .padding(12)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
@@ -132,6 +134,21 @@ private struct TargetCard: View {
                 .strokeBorder(.quaternary, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         )
         .accessibilityElement(children: .contain)
+    }
+
+    /// Re-reads `adb devices`. It marks rather than matters: an emulator started after the
+    /// sheet opened must be reachable without closing the sheet, and this list is the only
+    /// place that shows it.
+    private var refreshButton: some View {
+        Button {
+            model.refreshAndroidDevices()
+        } label: {
+            Label("common.refresh", systemImage: "arrow.clockwise")
+                .labelStyle(.iconOnly)
+        }
+        .help("android.emulator.refreshHelp")
+        .controlSize(.large)
+        .accessibilityLabel(Text("common.refresh"))
     }
 
     /// A physical device needs a security setting changed before `adb root` can work. A Play
