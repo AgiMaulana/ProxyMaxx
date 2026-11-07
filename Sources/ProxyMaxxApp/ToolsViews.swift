@@ -400,6 +400,7 @@ struct SettingsView: View {
                     VStack(spacing: 16) {
                         certificateCard
                         privacyCard
+                        UpdateSettingsCard()
                     }
                     .frame(width: 330)
                 }
