@@ -72,6 +72,41 @@ final class AppModel: ObservableObject {
         }
     }
     var isCrashReportingAvailable: Bool { crashReporting.isAvailable }
+    /// Drives the bottom-right prompt. Raised once per launch while the choice is open,
+    /// never in a launch where the user already answered or turned reporting on.
+    @Published var showErrorReportingPrompt = false
+    /// True when error reporting is off because the user already answered "Don't ask
+    /// again" (or "Not now" in an earlier launch), so Settings can say why nothing is
+    /// being asked. Kept as observable state because `UserDefaults` is not.
+    @Published private(set) var errorReportingDeclinedAtLaunch = false
+
+    /// Offers error reporting if this launch should ask. Called once the window is on
+    /// screen, so the prompt lands on a visible window rather than beside a blank one.
+    func presentErrorReportingPromptIfNeeded() {
+        guard isCrashReportingAvailable, CrashReportingConsent.isPromptDue() else { return }
+        showErrorReportingPrompt = true
+    }
+
+    /// "Enable": consent, the SDK, and the Settings switch all move together.
+    func acceptErrorReportingPrompt() {
+        CrashReportingConsent.setAsked()
+        errorReportingDeclinedAtLaunch = false
+        errorReportingEnabled = true
+        showErrorReportingPrompt = false
+    }
+
+    /// "Not now": the switch stays off for this launch but the prompt is still owed on a
+    /// later one, so a missed click is not a permanent decision.
+    func dismissErrorReportingPrompt() {
+        showErrorReportingPrompt = false
+    }
+
+    /// "Don't ask again": off, and no further prompts until the user changes Settings.
+    func declineErrorReportingPrompt() {
+        CrashReportingConsent.setAsked()
+        errorReportingDeclinedAtLaunch = true
+        showErrorReportingPrompt = false
+    }
 
     // MARK: - Android
 
@@ -148,6 +183,12 @@ final class AppModel: ObservableObject {
         } else if consented {
             CrashReportingConsent.setEnabled(false)
         }
+        // A build with no endpoint cannot be consented to, so any earlier "don't ask again"
+        // is dropped. That way the launch that first ships a DSN still gets to ask.
+        if !reporting.isAvailable, CrashReportingConsent.wasAsked() {
+            UserDefaults.standard.removeObject(forKey: CrashReportingConsent.askedDefaultsKey)
+        }
+        errorReportingDeclinedAtLaunch = CrashReportingConsent.wasAsked()
 
         let stored = UserDefaults.standard.integer(forKey: Self.portDefaultsKey)
         if (1...65535).contains(stored) {

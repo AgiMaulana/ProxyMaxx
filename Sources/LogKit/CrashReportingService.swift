@@ -26,6 +26,9 @@ public final class NoOpCrashReportingService: CrashReportingService {
 /// Persisted consent for remote error reporting. Off unless the user turned it on.
 public enum CrashReportingConsent {
     public static let defaultsKey = "ProxyMaxxErrorReportingEnabled"
+    /// Set once the user answered the first-launch prompt with "Don't ask again".
+    /// Enabling reporting from Settings means no prompt is due any more either.
+    public static let askedDefaultsKey = "ProxyMaxxErrorReportingAsked"
 
     public static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: defaultsKey)
@@ -33,5 +36,23 @@ public enum CrashReportingConsent {
 
     public static func setEnabled(_ enabled: Bool, in defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: defaultsKey)
+        // Enabling is itself an answer, so a later launch must not ask again.
+        if enabled {
+            setAsked(in: defaults)
+        }
+    }
+
+    public static func wasAsked(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: askedDefaultsKey)
+    }
+
+    public static func setAsked(in defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: askedDefaultsKey)
+    }
+
+    /// Whether the prompt is still owed: only while the choice is open. Reporting counts as
+    /// answered once it is on, once the user declined, or once the prompt was dismissed.
+    public static func isPromptDue(in defaults: UserDefaults = .standard) -> Bool {
+        !isEnabled(in: defaults) && !wasAsked(in: defaults)
     }
 }
