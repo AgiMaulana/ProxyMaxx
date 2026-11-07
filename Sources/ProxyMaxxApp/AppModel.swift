@@ -155,6 +155,18 @@ final class AppModel: ObservableObject {
     nonisolated private static let deviceCacheLock = NSLock()
     @Published private(set) var androidBusy = false
     @Published private(set) var androidLog: [String] = []
+    /// True once a run in this session completed without failing. Not persisted: the device
+    /// side can change without this app knowing, so the guide never claims it across launches.
+    @Published private(set) var androidFinished = false
+    /// Whether the output panel is open. It opens when Install or Revert is pressed and stays
+    /// open afterwards, because at that point its lines are the report; the user can close it.
+    @Published var androidShowsOutput = false
+    /// The serials of listed devices whose emulator is actually alive. `adb devices` keeps
+    /// reporting an emulator after it has been closed.
+    @Published private(set) var androidRunningSerials: Set<String> = []
+    /// Whether the selected device's ADB shell is already root, read when the guide opens and
+    /// after each run. Read-only; the guide uses it to say "Rooted" rather than guess.
+    @Published private(set) var androidRooted = false
     /// The last Android setup failure. Shown inside the guide, not as an app alert: the
     /// guide is a sheet, so an alert attached to the main window would only appear after
     /// the sheet closes, which reads as the click having done nothing.
@@ -168,6 +180,7 @@ final class AppModel: ObservableObject {
         }
     }
     private var androidStreamTask: Task<Void, Never>?
+    private var androidProbeTask: Task<Void, Never>?
     /// The two guide windows. Held here so the menu and the toolbar can both open them.
     @Published var showAndroidEmulatorGuide = false
     @Published var showAndroidDeviceGuide = false
@@ -816,19 +829,62 @@ final class AppModel: ObservableObject {
 
     // MARK: - Android setup
 
-    /// Re-read the connected devices. The guide refreshes this when it opens.
+    /// Re-read the connected devices. The guide refreshes this when it opens and after each
+    /// run. `adb devices` is a process launch, so it goes off the main actor; so does the
+    /// one-shell root probe, which is only sent for the selected device.
     func refreshAndroidDevices() {
-        androidDevices = AndroidToolchain.devices()
-        if let current = androidSerial, !androidDevices.contains(where: { $0.serial == current }) {
-            androidSerial = nil
+        androidProbeTask?.cancel()
+        androidProbeTask = Task { @MainActor [weak self] in
+            let listed = await Task.detached { AndroidToolchain.devices() }.value
+            guard !Task.isCancelled, let self else { return }
+            let running = await Task.detached { AndroidToolchain.runningSerials(in: listed) }.value
+            guard !Task.isCancelled else { return }
+            self.applyAndroidDevices(listed, running: running)
         }
-        if androidSerial == nil {
-            androidSerial = AndroidToolchain.preferredDevice(in: androidDevices)?.serial
+    }
+
+    /// `refreshAndroidDevices` with the pieces the caller already has, split out so the
+    /// selection rules are readable on their own.
+    ///
+    /// The current target is kept while it is still listed. Unplugging the last device does
+    /// not invent a selection, and a refresh during a run does not move the target out from
+    /// under the run that is using it.
+    private func applyAndroidDevices(_ listed: [AndroidDevice], running: Set<String>) {
+        androidDevices = listed
+        androidRunningSerials = running
+        let selectionValid = androidSerial.map { serial in listed.contains { $0.serial == serial } } ?? false
+        if !selectionValid, !androidBusy {
+            androidSerial = AndroidToolchain.preferredDevice(in: listed)?.serial
+        }
+        refreshAndroidRootState()
+    }
+
+    /// Ask the selected device whether its shell is root. Off the main actor, because it is
+    /// an `adb shell` launch; the answer only changes the chip, so it may arrive late.
+    private func refreshAndroidRootState() {
+        guard let serial = androidSerial else {
+            androidRooted = false
+            return
+        }
+        Task { @MainActor [weak self] in
+            let rooted = await Task.detached { AndroidToolchain.hasRootShell(serial: serial) }.value
+            guard let self, self.androidSerial == serial else { return }
+            self.androidRooted = rooted
         }
     }
 
     var androidSelectedDevice: AndroidDevice? {
         androidDevices.first { $0.serial == androidSerial }
+    }
+
+    var androidSelectedDeviceIsRunning: Bool {
+        guard let serial = androidSerial else { return false }
+        return androidRunningSerials.contains(serial)
+    }
+
+    /// The install's steps, from the script's own numbered lines.
+    var androidProgress: AndroidInstallProgress {
+        AndroidInstallProgress(log: androidLog)
     }
 
     // MARK: - Connected devices
@@ -970,8 +1026,15 @@ final class AppModel: ObservableObject {
         )
     }
 
-    func installCertificateOnAndroid() { runAndroid(mode: androidMode) }
-    func revertAndroidChanges() { runAndroid(mode: .revert) }
+    func installCertificateOnAndroid() {
+        androidShowsOutput = true
+        runAndroid(mode: androidMode)
+    }
+
+    func revertAndroidChanges() {
+        androidShowsOutput = true
+        runAndroid(mode: .revert)
+    }
 
     private func runAndroid(mode: AndroidInstallMode) {
         guard !androidBusy else { return }
@@ -982,6 +1045,7 @@ final class AppModel: ObservableObject {
                 return
             }
             androidError = nil
+            androidFinished = false
             androidLog = [L10n.string("error.runInTerminal"), "", command]
             return
         }
@@ -999,6 +1063,7 @@ final class AppModel: ObservableObject {
             return
         }
         androidError = nil
+        androidFinished = false
 
         let request = androidRequest(mode: mode)
         let logURL = request.stateDirectory.appendingPathComponent("run.log")
@@ -1023,6 +1088,7 @@ final class AppModel: ObservableObject {
                 await MainActor.run {
                     self.androidBusy = false
                     self.androidError = nil
+                    self.androidFinished = true
                     self.appendAndroidLog([L10n.string("error.finished")])
                     self.log(mode == .revert ? "Android changes reverted" : "Android setup finished")
                     self.refreshAndroidDevices()
