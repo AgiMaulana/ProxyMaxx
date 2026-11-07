@@ -397,6 +397,12 @@ prepare_root_method() {
 restore_magisk_root_if_needed() {
     [[ "$restore_magisk" == "true" ]] || return 0
 
+    if [[ -z "$magisk_script_path" ]]; then
+        echo "❌ No Magisk restore helper was named for this revert."
+        echo "   This is a ProxyMaxx bug, not an emulator problem; the proxy and tunnel"
+        echo "   app are still cleared."
+        return 1
+    fi
     if [[ ! -f "$magisk_script_path" ]]; then
         echo "❌ The bundled Magisk restore helper is missing."
         echo "   Reinstall ProxyMaxx and try reverting again."
