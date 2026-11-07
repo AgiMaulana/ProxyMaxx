@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "FlowKit", targets: ["FlowKit"]),
         .library(name: "RuleKit", targets: ["RuleKit"]),
         .library(name: "SystemKit", targets: ["SystemKit"]),
+        .library(name: "LogKit", targets: ["LogKit"]),
         .library(name: "CodeGenKit", targets: ["CodeGenKit"]),
     ],
     dependencies: [
@@ -74,6 +75,12 @@ let package = Package(
         ),
 
         .target(name: "SystemKit", dependencies: ["Branding"]),
+
+        // Rotating structured logs shared by the app, the CLI, and the engine.
+        .target(
+            name: "LogKit",
+            dependencies: ["Branding", .product(name: "Logging", package: "swift-log")]
+        ),
         .target(name: "CodeGenKit", dependencies: ["FlowKit"]),
 
         // Local process attribution shared by the app and CLI.
@@ -81,7 +88,7 @@ let package = Package(
 
         .executableTarget(
             name: "ProxyMaxxApp",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding"]
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding", "LogKit"]
         ),
 
         // The companion CLI (`proxymaxx-cli`), a headless driver for AI agents. It lives
@@ -89,7 +96,7 @@ let package = Package(
         // reuses ProxyKit/CertKit/RuleKit/FlowKit instead of duplicating any of them.
         .executableTarget(
             name: "ProxyMaxxCLI",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "ClientKit", "Branding"],
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "ClientKit", "Branding", "LogKit"],
             path: "cli",
             exclude: ["README.md"]
         ),
@@ -134,5 +141,6 @@ let package = Package(
         .testTarget(name: "CodeGenKitTests", dependencies: ["CodeGenKit", "FlowKit"]),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
         .testTarget(name: "SystemKitTests", dependencies: ["SystemKit"]),
+        .testTarget(name: "LogKitTests", dependencies: ["LogKit"]),
     ]
 )

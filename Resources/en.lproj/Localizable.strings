@@ -344,6 +344,7 @@
 /* MARK: Menus */
 "menu.about" = "About ProxyMaxx";
 "menu.clearSession" = "Clear Session";
+"menu.reportIssue" = "Report Issue…";
 "menu.mapLocal" = "Local Override…";
 "menu.androidEmulator" = "Open Android Emulator Guide";
 "menu.androidDevice" = "Open Android Device Guide";

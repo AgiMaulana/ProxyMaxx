@@ -9,6 +9,7 @@ import CertKit
 import RuleKit
 import SystemKit
 import ClientKit
+import LogKit
 
 /// Coordinates the proxy engine, the flow store, the rule store and the system-level
 /// integrations. Everything the UI observes lives here.
@@ -110,6 +111,7 @@ final class AppModel: ObservableObject {
     private static let androidMagiskDefaultsKey = "AndroidEmulatorMagisk"
 
     init() {
+        LogKit.bootstrap()
         let stored = UserDefaults.standard.integer(forKey: Self.portDefaultsKey)
         if (1...65535).contains(stored) {
             port = stored
@@ -1288,6 +1290,7 @@ final class AppModel: ObservableObject {
     private func log(_ message: String) {
         let stamped = "[\(Self.timeFormatter.string(from: Date()))] \(message)"
         activityLog.append(stamped)
+        LogKit.record(message, component: "App")
         if activityLog.count > 500 {
             activityLog.removeFirst(activityLog.count - 500)
         }
