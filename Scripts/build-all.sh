@@ -18,4 +18,6 @@ case "$CONFIGURATION" in
     *) echo "Usage: $0 [debug|release]" >&2; exit 2 ;;
 esac
 
+# The tunnel APK travels inside the bundle, so it is not a separate download. A release
+# bundle refuses to ship without it; see bundle-app.sh.
 exec "$ROOT/Scripts/bundle-app.sh" "$CONFIGURATION" --with-android-vpn

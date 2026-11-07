@@ -112,6 +112,61 @@ jobs:
             || { echo "::error::the launcher is not pinned to the production environment"; exit 1; }
           echo "Error reporting is available and tagged production."
 
+      # Sentry symbolicates a crash by matching the dSYM's UUID to the binary's, so a release
+      # built without the upload produces reports full of raw addresses. The auth token is a
+      # real credential, unlike the DSN: it stays in this step's environment and never
+      # reaches the bundle, which is why a missing token degrades instead of failing the run.
+      - name: Install sentry-cli
+        env:
+          # Pinned: `debug-files upload` is stable, but a floating CLI is one more thing
+          # that can change what a release does.
+          SENTRY_CLI_VERSION: '3.8.2'
+        run: |
+          # Sentry's documented installer, version-pinned for reproducible releases. It reads
+          # INSTALL_DIR (not PATH), and refuses to overwrite an existing binary — so it gets
+          # its own directory, and that directory is what goes on PATH for the next step.
+          INSTALL_DIR="$RUNNER_TEMP/sentry-cli-bin"
+          rm -rf "$INSTALL_DIR"
+          mkdir -p "$INSTALL_DIR"
+          curl -sL https://sentry.io/get-cli/ |
+            INSTALL_DIR="$INSTALL_DIR" SENTRY_CLI_VERSION="$SENTRY_CLI_VERSION" sh
+          CLI="$INSTALL_DIR/sentry-cli"
+          [[ -x "$CLI" ]] || { echo "::error::the Sentry installer left no sentry-cli"; exit 1; }
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+          "$CLI" --version
+
+      - name: Upload dSYMs to Sentry
+        env:
+          # The CLI reads this variable itself; it is never passed as a flag, where it would
+          # land in the log.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          # The organization the token was issued for.
+          SENTRY_ORG: colonyx
+          # A DSN is https://<public key>@<host>/<project id>: the project arrives here as a
+          # parameter rather than a `--project` flag so one shell line reads it once. It comes
+          # from the DSN, so the symbols land in the same project the crashes are sent to.
+          SENTRY_DSN_SECRET: ${{ secrets.SENTRY_DSN }}
+        run: |
+          if [[ -z "$SENTRY_AUTH_TOKEN" ]]; then
+            echo "::warning::SENTRY_AUTH_TOKEN is not set — crash reports will not be symbolicated."
+            exit 0
+          fi
+          if [[ -z "$SENTRY_DSN_SECRET" ]]; then
+            echo "::warning::SENTRY_DSN is not set — there is no Sentry project to upload to."
+            exit 0
+          fi
+          [[ -d dist/dSYMs ]] || { echo "::error::the build produced no dSYMs to upload"; exit 1; }
+
+          SENTRY_PROJECT="${SENTRY_DSN_SECRET##*/}"
+          [[ "$SENTRY_PROJECT" =~ ^[0-9]+$ ]] ||
+            { echo "::error::cannot read the project id from the DSN (got '$SENTRY_PROJECT')"; exit 1; }
+          export SENTRY_PROJECT
+
+          echo "Uploading $(find dist/dSYMs -maxdepth 1 -name '*.dSYM' | wc -l | tr -d ' ') dSYM bundle(s) to ${SENTRY_ORG}/${SENTRY_PROJECT}"
+          # --type dsym keeps the scan to the bundles this build produced; the org and project
+          # come from the environment above, which the CLI reads without a config file.
+          sentry-cli debug-files upload --type dsym dist/dSYMs
+
       - name: Verify the bundled APK signature
         if: env.STORE_FILE != ''
         run: |

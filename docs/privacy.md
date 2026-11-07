@@ -149,3 +149,10 @@ no DSN and therefore cannot report errors; to exercise the path locally, export
 `PROXYMAXX_SENTRY_DSN` (and optionally `PROXYMAXX_SENTRY_ENVIRONMENT`) before running
 `Scripts/run.sh`. Verify event contents in the `development` environment, not in
 `production`.
+
+Symbolication is a separate secret: `SENTRY_AUTH_TOKEN` lets the release workflow upload the
+build's `dSYM`s to the same project, so a crash in a shipped build resolves to function names
+and line numbers. `bundle-app.sh` compiles release builds with `-g` for this reason and fails
+one that produced no dSYMs. The token is scoped to debug-information upload, is used only by
+that workflow step, and is never embedded in the app or the DMG. A release built without it
+still works; its crashes simply arrive unsymbolicated.
