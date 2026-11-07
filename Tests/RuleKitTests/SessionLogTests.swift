@@ -164,6 +164,53 @@ final class SessionLogFollowerTests: XCTestCase {
         XCTAssertEqual(SessionLog.read(url: url).count, lines.count - 1, "every retained line must decode")
     }
 
+    /// Joining a session in progress must not replay the flows the engine already
+    /// recorded: the session owns that history, and printing it again shows every
+    /// captured flow twice.
+    func testAttachingMidSessionSkipsRetainedHistory() throws {
+        let writer = SessionLog.Writer(url: url)
+        writer.append(makeFlow("/before-1"))
+        writer.append(makeFlow("/before-2"))
+
+        var follower = SessionLog.Follower(url: url, fromStart: false)
+        XCTAssertTrue(follower.poll().isEmpty, "retained flows are history, not new traffic")
+
+        writer.append(makeFlow("/after"))
+        XCTAssertEqual(follower.poll().map(\.request.path), ["/after"])
+        XCTAssertTrue(follower.poll().isEmpty, "a flow arriving after attach is delivered once")
+    }
+
+    /// A flow streaming at the moment of attach has a retained snapshot already. It must
+    /// not surface from that half, and must not surface twice: once on attach and again
+    /// when it closes.
+    func testFlowInFlightAtAttachIsDeliveredOnceWhenItCloses() throws {
+        let writer = SessionLog.Writer(url: url)
+        writer.append(makeFlow("/done"))
+        var open = makeFlow("/streaming", body: "early", closed: false)
+        open.response = HTTPResponse(statusCode: 200, body: Data("half".utf8))
+        writer.append(open)
+
+        var follower = SessionLog.Follower(url: url, fromStart: false)
+        XCTAssertTrue(follower.poll().isEmpty)
+
+        open.timing.end = Date()
+        writer.append(open)
+        XCTAssertEqual(follower.poll().map(\.request.path), ["/streaming"])
+        XCTAssertTrue(follower.poll().isEmpty)
+        XCTAssertTrue(follower.finish().isEmpty)
+    }
+
+    /// A reader that passes `--out` names a capture this CLI is not serving, so its
+    /// retained flows are the whole point of reading it.
+    func testExplicitLogIsReadFromItsStart() throws {
+        let writer = SessionLog.Writer(url: url)
+        writer.append(makeFlow("/first"))
+        writer.append(makeFlow("/second"))
+
+        var follower = SessionLog.Follower(url: url, fromStart: true)
+        XCTAssertEqual(follower.poll().map(\.request.path), ["/first", "/second"])
+    }
+
     private func makeFlow(_ path: String, body: String = "hello", closed: Bool = true) -> Flow {
         var flow = Flow(request: HTTPRequest(
             method: "GET",
