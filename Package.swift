@@ -33,6 +33,8 @@ let package = Package(
         .package(url: "https://github.com/f-meloni/SwiftBrotli.git", from: "0.1.0"),
         .package(url: "https://github.com/AgiMaulana/ZIPFoundation.git", exact: "0.9.21"),
         .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "9.33.0"),
+        // Protocol v1 SDK used by the integration fixture plugin (local path).
+        .package(path: "../ProxyMaxx-Sdk"),
     ],
     targets: [
         /// Product identity shared by every component that writes user data.
@@ -72,6 +74,14 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
                 .product(name: "Crypto", package: "swift-crypto"),
             ]
+        ),
+
+        // Integration fixture: a real plugin built on ProxyMaxxPluginSDK, spawned
+        // by PluginRunner in SDKIntegrationTests.
+        .executableTarget(
+            name: "SDKFixturePlugin",
+            dependencies: [.product(name: "ProxyMaxxPluginSDK", package: "proxymaxx-sdk")],
+            path: "Tests/PluginKitTests/Fixtures/SDKFixturePlugin"
         ),
 
         .target(
@@ -169,7 +179,9 @@ let package = Package(
             dependencies: [
                 "PluginKit", "Branding",
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            ]
+                .product(name: "ProxyMaxxPluginSDK", package: "proxymaxx-sdk"),
+            ],
+            exclude: ["Fixtures/SDKFixturePlugin"]
         ),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
         .testTarget(name: "SystemKitTests", dependencies: ["SystemKit", "Branding"]),

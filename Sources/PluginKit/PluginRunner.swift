@@ -37,19 +37,53 @@ public final class PluginRunner: ObservableObject {
 
     private let permissionManager: PermissionManager
     private var processes: [String: Process] = [:]
+    /// In-flight consent requests keyed by the plugin's `requestId`, so a
+    /// `permission.cancel` message can resolve the pending request.
+    private var inflightRequests: [String: Task<PluginPermissionStatus, Never>] = [:]
+    /// Request ids already answered with `permission.cancelled`; their late
+    /// consent resolution is ignored.
+    private var cancelledRequests: Set<String> = []
     private nonisolated static let lineLimitBytes = 1_048_576
-    private static let messageKindPermissionRequest = "permission.request"
-    private static let messageKindPermissionStatus = "permission.status"
+
+    // Protocol v1 (Docs/PROTOCOL.md in the ProxyMaxx Plugin SDK).
+    private static let kindPermissionRequest = "permission.request"
+    private static let kindPermissionRequestAll = "permission.requestAll"
+    private static let kindPermissionCheck = "permission.check"
+    private static let kindPermissionCheckAll = "permission.checkAll"
+    private static let kindPermissionCancel = "permission.cancel"
+    private static let kindPermissionStatus = "permission.status"
+    private static let kindPermissionStatuses = "permission.statuses"
+    private static let kindPermissionCancelled = "permission.cancelled"
+    private static let kindPermissionError = "permission.error"
 
     struct PluginRequestMessage: Decodable {
         let kind: String
+        let requestId: String?
         let permissionId: String?
+        let permissionIds: [String]?
     }
 
-    struct PluginResponseMessage: Encodable {
-        let kind: String
-        let permissionId: String
+    struct StatusReply: Encodable {
+        let kind = "permission.status"
+        let requestId: String
         let status: String
+    }
+
+    struct StatusesReply: Encodable {
+        let kind = "permission.statuses"
+        let requestId: String
+        let statuses: [String: String]
+    }
+
+    struct CancelledReply: Encodable {
+        let kind = "permission.cancelled"
+        let requestId: String
+    }
+
+    struct ErrorReply: Encodable {
+        let kind = "permission.error"
+        let requestId: String
+        let error: String
     }
 
     public init(permissionManager: PermissionManager) {
@@ -210,34 +244,100 @@ public final class PluginRunner: ObservableObject {
             terminate(pluginID, reason: "malformed message: \(error.localizedDescription)")
             return
         }
+        // Every protocol v1 request carries a requestId; replies correlate with it.
+        guard let requestId = request.requestId, !requestId.isEmpty else {
+            terminate(pluginID, reason: "message without requestId")
+            return
+        }
+        // A request cancelled by the plugin must never be answered later by a
+        // consent resolution that raced with the cancellation.
+        defer { cancelledRequests.remove(requestId) }
+
         switch request.kind {
-        case Self.messageKindPermissionRequest:
+        case Self.kindPermissionRequest:
             guard let permissionID = request.permissionId else {
                 terminate(pluginID, reason: "permission.request without permissionId")
                 return
             }
-            // May present consent UI and wait for the user; the plugin waits on stdin.
-            let status = await permissionManager.request(pluginID: pluginID, permissionID: permissionID)
-            let response = PluginResponseMessage(
-                kind: Self.messageKindPermissionStatus,
-                permissionId: permissionID,
-                status: status.rawValue
-            )
-            guard let payload = try? JSONEncoder().encode(response) else {
-                terminate(pluginID, reason: "host could not encode a response")
+            let task = Task { await permissionManager.request(pluginID: pluginID, permissionID: permissionID) }
+            inflightRequests[requestId] = task
+            let status = await task.value
+            guard inflightRequests.removeValue(forKey: requestId) != nil,
+                  !cancelledRequests.contains(requestId) else {
+                return // cancelled by the plugin; the cancelled reply already went out
+            }
+            if status == .notRequested {
+                // Spec §6: a completed request must never surface NOT_REQUESTED —
+                // report an unrecoverable failure so the SDK fails closed.
+                sendReply(
+                    ErrorReply(requestId: requestId, error: "unresolvedRequest"),
+                    stdin: stdin, pluginID: pluginID
+                )
                 return
             }
-            var outgoing = payload
-            outgoing.append(0x0A)
-            do {
-                try stdin.write(contentsOf: outgoing)
-            } catch {
-                // Broken pipe means the plugin exited mid-request; the termination
-                // handler records that.
-                os_log_debug(pluginID, "could not write response: \(error.localizedDescription)")
+            sendReply(StatusReply(requestId: requestId, status: status.rawValue), stdin: stdin, pluginID: pluginID)
+
+        case Self.kindPermissionRequestAll:
+            guard let permissionIDs = request.permissionIds, !permissionIDs.isEmpty else {
+                terminate(pluginID, reason: "permission.requestAll without permissionIds")
+                return
             }
+            // One batch operation: one decision per permission, resolved in input
+            // order. Distinct-permission consent experiences are not grouped yet;
+            // coalescing still merges concurrent requests for the same permission.
+            var statuses: [String: String] = [:]
+            for permissionID in permissionIDs {
+                let status = await permissionManager.request(pluginID: pluginID, permissionID: permissionID)
+                statuses[permissionID] = status.rawValue
+            }
+            sendReply(StatusesReply(requestId: requestId, statuses: statuses), stdin: stdin, pluginID: pluginID)
+
+        case Self.kindPermissionCheck:
+            guard let permissionID = request.permissionId else {
+                terminate(pluginID, reason: "permission.check without permissionId")
+                return
+            }
+            let status = permissionManager.status(pluginID: pluginID, permissionID: permissionID)
+            sendReply(StatusReply(requestId: requestId, status: status.rawValue), stdin: stdin, pluginID: pluginID)
+
+        case Self.kindPermissionCheckAll:
+            guard let permissionIDs = request.permissionIds else {
+                terminate(pluginID, reason: "permission.checkAll without permissionIds")
+                return
+            }
+            let statuses = Dictionary(uniqueKeysWithValues: permissionIDs.map { id in
+                (id, permissionManager.status(pluginID: pluginID, permissionID: id).rawValue)
+            })
+            sendReply(StatusesReply(requestId: requestId, statuses: statuses), stdin: stdin, pluginID: pluginID)
+
+        case Self.kindPermissionCancel:
+            // Plugin-initiated cancellation resolves as cancellation; no decision
+            // is recorded for the request itself (spec §7.2). The consent task is
+            // cancelled; the runner no longer waits on it.
+            inflightRequests.removeValue(forKey: requestId)?.cancel()
+            cancelledRequests.insert(requestId)
+            sendReply(CancelledReply(requestId: requestId), stdin: stdin, pluginID: pluginID)
+
         default:
-            terminate(pluginID, reason: "unknown message kind '\(request.kind)'")
+            // Forward compatibility: unknown request kinds are ignored.
+            os_log_debug(pluginID, "ignoring unknown message kind '\(request.kind)'")
+        }
+    }
+
+    /// Encodes and writes one protocol v1 reply line to the plugin's stdin.
+    private func sendReply(_ value: some Encodable, stdin: FileHandle, pluginID: String) {
+        guard let payload = try? JSONEncoder().encode(value) else {
+            terminate(pluginID, reason: "host could not encode a response")
+            return
+        }
+        var outgoing = payload
+        outgoing.append(0x0A)
+        do {
+            try stdin.write(contentsOf: outgoing)
+        } catch {
+            // Broken pipe means the plugin exited mid-request; the termination
+            // handler records that.
+            os_log_debug(pluginID, "could not write response: \(error.localizedDescription)")
         }
     }
 

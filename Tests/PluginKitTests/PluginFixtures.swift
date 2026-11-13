@@ -131,9 +131,10 @@ enum PluginFixtures {
     /// The canonical stub plugin for runner tests: request one permission, wait for
     /// the response line, write it to the file named by argv[1].
     static func permissionProbeScript(permissionID: String) -> String {
+        // Protocol v1: every request carries a requestId.
         """
         #!/bin/sh
-        printf '{"kind":"permission.request","permissionId":"\(permissionID)"}\\n'
+        printf '{"kind":"permission.request","requestId":"probe-1","permissionId":"\(permissionID)"}\\n'
         IFS= read -r response
         printf '%s' "$response" > "$1"
         """

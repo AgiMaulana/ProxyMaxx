@@ -50,7 +50,9 @@ public enum PluginPackageArchive {
                 try? manager.removeItem(at: stage)
                 if extracted && !committed { try? manager.removeItem(at: managed) }
             }
-            for item in validated.items where item.path != manifestEntry {
+            // manifest.json is extracted too: the runner exposes PROXYMAXX_PLUGIN_DIR
+            // to the plugin process, and SDK plugins load their manifest from there.
+            for item in validated.items {
                 let destination = stage.appendingPathComponent(item.path, isDirectory: item.entry.type == .directory)
                 if item.entry.type == .directory {
                     try manager.createDirectory(at: destination, withIntermediateDirectories: true)
