@@ -15,6 +15,7 @@ struct MapLocalView: View {
     @State private var showEnabledOnly = false
     @State private var filterText = ""
     @State private var importPreview: MapLocalImportPreview?
+    @State private var harPreview: HARImportPreview?
     @State private var previewDirectory: URL?
     @State private var isInspecting = false
     @State private var errorMessage: String?
@@ -67,6 +68,11 @@ struct MapLocalView: View {
                 onApply()
             }
         }
+        .sheet(item: $harPreview) { preview in
+            HARImportPreviewView(preview: preview) { skipNonSuccess in
+                try importHAR(from: preview.entries, skipNonSuccess: skipNonSuccess)
+            }
+        }
         .alert("mapLocal.bundle.errorTitle", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -110,6 +116,7 @@ struct MapLocalView: View {
 
             Button("mapLocal.bundle.importZIP", action: chooseImport)
                 .keyboardShortcut("i", modifiers: [.command, .shift])
+            Button("mapLocal.importHAR", action: chooseHARImport)
             Menu("mapLocal.bundle.export") {
                 Button("mapLocal.bundle.exportSelected") { exportRules(ids: selection) }
                     .disabled(selection.isEmpty)
@@ -165,7 +172,7 @@ struct MapLocalView: View {
             Spacer()
             if isInspecting {
                 ProgressView().controlSize(.small)
-                Text("mapLocal.bundle.validating").font(.caption)
+                Text("mapLocal.validating").font(.caption)
             } else {
                 Text(ruleCountLabel(visibleRows.count))
                     .font(.caption)
@@ -383,6 +390,53 @@ struct MapLocalView: View {
         if let previewDirectory { try? FileManager.default.removeItem(at: previewDirectory) }
         previewDirectory = nil
         importPreview = nil
+    }
+
+    private func chooseHARImport() {
+        let harType = UTType(filenameExtension: "har")
+        let contentTypes = [harType, .json].compactMap(\.self)
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = contentTypes
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.title = L10n.string("mapLocal.importHAR")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        isInspecting = true
+        Task { @MainActor in
+            defer { isInspecting = false }
+            do {
+                let entries = try await Task.detached(priority: .userInitiated) {
+                    try HARImporter.parse(Data(contentsOf: url))
+                }.value
+                let importable = entries.filter { HARImporter.hasBody($0) }
+                guard !importable.isEmpty else {
+                    errorMessage = L10n.string("mapLocal.har.noEntries")
+                    return
+                }
+                harPreview = HARImportPreview(entries: entries)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func importHAR(from entries: [HAREntry], skipNonSuccess: Bool) throws {
+        var imported: [UUID] = []
+        for entry in entries {
+            guard HARImporter.hasBody(entry) else { continue }
+            let status = entry.response?.status ?? 0
+            if skipNonSuccess, !(200..<300).contains(status) { continue }
+            let fileURL = HARImporter.responseFileURL(for: entry, in: MapLocalResponseTemplate.directory)
+            try HARImporter.writeResponse(for: entry, to: fileURL)
+            guard let rule = HARImporter.makeRule(for: entry, responseFileURL: fileURL) else { continue }
+            rules.addMapLocalRule(rule)
+            imported.append(rule.id)
+        }
+        filterText = ""
+        showEnabledOnly = false
+        selection = Set(imported)
+        onApply()
     }
 
     private func exportRules(ids: Set<UUID>?) {
