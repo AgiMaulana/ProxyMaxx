@@ -11,6 +11,7 @@ import SystemKit
 import ClientKit
 import LogKit
 import SentryKit
+import Branding
 
 /// Coordinates the proxy engine, the flow store, the rule store and the system-level
 /// integrations. Everything the UI observes lives here.
@@ -339,6 +340,11 @@ final class AppModel: ObservableObject {
     let flowStore = FlowStore()
     /// Point the store at `Application Support` so the rule lists survive a restart.
     let ruleStore = RuleStore(persistenceURL: RuleStore.defaultPersistenceURL)
+    /// Pinned and saved sidebar entries, also kept under `Application Support` so the
+    /// collections survive a restart.
+    let sidebarMarks = SidebarMarks(
+        persistenceURL: Brand.supportDirectory.appendingPathComponent("sidebar-marks.json")
+    )
 
     private var engine: ProxyEngine?
     private var authority: CertificateAuthority?

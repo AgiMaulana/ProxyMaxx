@@ -8,6 +8,8 @@ struct MainView: View {
     /// Observed directly so captured traffic redraws the table. `AppModel` does not
     /// republish its store, and the store coalesces snapshot bursts into `revision` bumps.
     @ObservedObject var flowStore: FlowStore
+    /// Observed so pinning or saving an entry redraws the sidebar and its collection rows.
+    @ObservedObject var marks: SidebarMarks
     @State private var filter = FlowFilter()
     @State private var selection: UUID?
     @State private var showSSLProxying = false
@@ -18,7 +20,7 @@ struct MainView: View {
     var body: some View {
         // Derived once per pass. `flows` was a computed property read five times, each
         // read re-filtering the whole store.
-        let flows = filter.apply(to: flowStore.flows)
+        let flows = scopedFlows()
         let summary = FlowSummary(flowStore.flows)
         let selectedFlow = flows.first { $0.id == selection }
         return VStack(spacing: 0) {
@@ -106,44 +108,163 @@ struct MainView: View {
         }
     }
 
+    /// The rows the traffic table shows: the text/method/error filter, plus the sidebar
+    /// collection scope. `.pinned` and `.saved` are not flow predicates — they narrow the
+    /// list to the flows owned by the entries those collections list.
+    private func scopedFlows() -> [Flow] {
+        var effective = filter
+        let collection = filter.sidebarSelection
+        if collection == .pinned || collection == .saved { effective.sidebarSelection = .all }
+        let base = effective.apply(to: flowStore.flows)
+        switch collection {
+        case .pinned: return base.filter { marks.isPinned($0) }
+        case .saved: return base.filter { marks.isSaved($0) }
+        default: return base
+        }
+    }
+
     private func sidebarView(summary: FlowSummary) -> some View {
         List(selection: sidebarSelection) {
             Section("main.favorites") {
                 sidebarRow(L10n.string("main.all"), systemImage: "tray", selection: .all, count: summary.total)
-                sidebarRow(L10n.string("main.pinned"), systemImage: "pin", selection: .pinned, count: summary.pinned)
-                sidebarRow(L10n.string("main.saved"), systemImage: "bookmark", selection: .saved, count: summary.saved)
+                sidebarRow(L10n.string("main.pinned"), systemImage: "pin", selection: .pinned, count: marks.pinned.count)
+                sidebarRow(L10n.string("main.saved"), systemImage: "bookmark", selection: .saved, count: marks.saved.count)
             }
 
-            if !model.connectedDevices.isEmpty {
-                let counts = DeviceFlowCounts(flowStore.flows)
-                Section(header: Text(L10n.format("main.devices", model.connectedDevices.count))) {
-                    ForEach(model.connectedDevices) { device in
-                        deviceRow(device, count: counts.count(for: device.serial))
-                    }
-                }
-            }
-
-            if !summary.apps.isEmpty {
-                Section(header: Text(L10n.format("main.apps", summary.apps.count))) {
-                    ForEach(summary.apps) { entry in
-                        HStack {
-                            ClientAppLabel(app: entry.app, showsIdentity: summary.duplicateAppNames.contains(entry.app.name))
-                            Spacer()
-                            sidebarCount(entry.count)
-                        }
-                        .tag(SidebarSelection.client(entry.id))
-                    }
-                }
-            }
-
-            Section(header: Text(L10n.format("main.domains", summary.domains.count))) {
-                ForEach(summary.domains, id: \.self) { domain in
-                    sidebarRow(domain, systemImage: "globe", selection: .domain(domain), count: summary.domainCount(domain))
-                }
+            switch filter.sidebarSelection {
+            case .pinned:
+                pinnedSections()
+            case .saved:
+                savedSection()
+            default:
+                allSections(summary: summary)
             }
         }
         .listStyle(.sidebar)
         .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+    }
+
+    /// The Devices, Apps and Hosts sections in full, as the "All" collection lists them.
+    @ViewBuilder
+    private func allSections(summary: FlowSummary) -> some View {
+        if !model.connectedDevices.isEmpty {
+            let counts = DeviceFlowCounts(flowStore.flows)
+            Section(header: Text(L10n.format("main.devices", model.connectedDevices.count))) {
+                ForEach(model.connectedDevices) { device in
+                    entityRow(
+                        entity: .device(serial: device.serial, label: L10n.string(device.displayName)),
+                        selection: .device(device.serial),
+                        count: counts.count(for: device.serial)
+                    ) {
+                        Label {
+                            Text(L10n.string(device.displayName)).lineLimit(1)
+                        } icon: {
+                            Image(systemName: device.isEmulator ? "android" : "candybarphone")
+                                .help(L10n.string("main.devicesHelp"))
+                        }
+                    }
+                }
+            }
+        }
+
+        if !summary.apps.isEmpty {
+            Section(header: Text(L10n.format("main.apps", summary.apps.count))) {
+                ForEach(summary.apps) { entry in
+                    entityRow(entity: .app(entry.app), selection: .client(entry.id), count: entry.count) {
+                        ClientAppLabel(app: entry.app, showsIdentity: summary.duplicateAppNames.contains(entry.app.name))
+                    }
+                }
+            }
+        }
+
+        Section(header: Text(L10n.format("main.domains", summary.domains.count))) {
+            ForEach(summary.domains, id: \.self) { domain in
+                entityRow(entity: .domain(domain), selection: .domain(domain), count: summary.domainCount(domain)) {
+                    Label(domain, systemImage: "globe")
+                }
+            }
+        }
+    }
+
+    /// The pinned entries, still grouped under their own sections.
+    @ViewBuilder
+    private func pinnedSections() -> some View {
+        if marks.pinned.isEmpty {
+            collectionHint(title: "main.noPinnedEntries", hint: "main.pinHint")
+        } else {
+            let devices = marks.pinned.filter { $0.kind == .device }
+            let apps = marks.pinned.filter { $0.kind == .app }
+            let domains = marks.pinned.filter { $0.kind == .domain }
+            if !devices.isEmpty {
+                Section(header: Text(L10n.format("main.devices", devices.count))) {
+                    ForEach(devices) { markRow($0) }
+                }
+            }
+            if !apps.isEmpty {
+                Section(header: Text(L10n.format("main.apps", apps.count))) {
+                    ForEach(apps) { markRow($0) }
+                }
+            }
+            if !domains.isEmpty {
+                Section(header: Text(L10n.format("main.domains", domains.count))) {
+                    ForEach(domains) { markRow($0) }
+                }
+            }
+        }
+    }
+
+    /// The saved entries, as one bookmark list rather than grouped sections.
+    @ViewBuilder
+    private func savedSection() -> some View {
+        if marks.saved.isEmpty {
+            collectionHint(title: "main.noSavedEntries", hint: "main.saveHint")
+        } else {
+            Section(header: Text(L10n.string("main.saved"))) {
+                ForEach(marks.saved) { markRow($0) }
+            }
+        }
+    }
+
+    /// Stands in for a section whose collection has nothing in it yet.
+    private func collectionHint(title: String, hint: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.string(title))
+            Text(L10n.string(hint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A row for a mark that is not sourced from the live summary, so a pinned or saved entry
+    /// whose device stopped, or which has no traffic this session, still lists.
+    private func markRow(_ entity: SidebarEntity) -> some View {
+        entityRow(entity: entity, selection: selection(for: entity), count: flowCount(for: entity)) {
+            Label(entity.label, systemImage: icon(for: entity))
+        }
+    }
+
+    private func selection(for entity: SidebarEntity) -> SidebarSelection {
+        switch entity.kind {
+        case .device: return .device(entity.key)
+        case .app: return .client(entity.key)
+        case .domain: return .domain(entity.key)
+        }
+    }
+
+    private func icon(for entity: SidebarEntity) -> String {
+        switch entity.kind {
+        case .device:
+            let emulator = model.connectedDevices.first { $0.serial == entity.key }?.isEmulator ?? false
+            return emulator ? "android" : "candybarphone"
+        case .app: return "app"
+        case .domain: return "globe"
+        }
+    }
+
+    private func flowCount(for entity: SidebarEntity) -> Int {
+        flowStore.flows.lazy.filter { entity.matches($0) }.count
     }
 
     private var sidebarSelection: Binding<SidebarSelection?> {
@@ -157,6 +278,7 @@ struct MainView: View {
         )
     }
 
+    /// A Collections row: All, Pinned or Saved. No pin/save menu — these are the collections.
     private func sidebarRow(_ title: String, systemImage: String, selection: SidebarSelection, count: Int) -> some View {
         HStack {
             Label(title, systemImage: systemImage)
@@ -168,22 +290,37 @@ struct MainView: View {
         .tag(selection)
     }
 
-    /// One connected device. The Help view explains the shared emulator address, so it sits
-    /// on the icon alone: inside the Label it swallowed the click before the row could be
-    /// selected, because the tooltip view takes hover input across the whole row.
-    private func deviceRow(_ device: AndroidDevice, count: Int) -> some View {
-        HStack {
-            Label {
-                Text(L10n.string(device.displayName)).lineLimit(1)
-            } icon: {
-                Image(systemName: device.isEmulator ? "android" : "candybarphone")
-                    .help(L10n.string("main.devicesHelp"))
-            }
+    /// One entry in the Devices/Apps/Hosts sections. Carries the pin and bookmark marks and
+    /// the context menu that toggles them. The device Help tooltip sits on the icon alone:
+    /// inside the Label it swallows the click before the row can be selected, because the
+    /// tooltip takes hover input across the whole row.
+    private func entityRow<Label: View>(
+        entity: SidebarEntity,
+        selection: SidebarSelection,
+        count: Int,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        HStack(spacing: 6) {
+            label()
+                .lineLimit(1)
             Spacer()
+            if marks.isPinned(entity) { markGlyph("pin.fill") }
+            if marks.isSaved(entity) { markGlyph("bookmark.fill") }
             sidebarCount(count)
         }
         .contentShape(Rectangle())
-        .tag(SidebarSelection.device(device.serial))
+        .tag(selection)
+        .contextMenu {
+            Button(marks.isPinned(entity) ? "main.unpin" : "main.pin") { marks.togglePin(entity) }
+            Button(marks.isSaved(entity) ? "main.unsave" : "main.save") { marks.toggleSave(entity) }
+        }
+    }
+
+    private func markGlyph(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 
     private func sidebarCount(_ count: Int) -> some View {
@@ -202,21 +339,15 @@ struct MainView: View {
     /// Counts all captured flows in one pass, independent of active filters.
     private struct FlowSummary {
         let total: Int
-        let pinned: Int
-        let saved: Int
         let apps: [AppSummary]
         let duplicateAppNames: Set<String>
         let domains: [String]
         private let domainCounts: [String: Int]
 
         init(_ flows: [Flow]) {
-            var pinned = 0
-            var saved = 0
             var apps: [String: AppSummary] = [:]
             var domainCounts: [String: Int] = [:]
             for flow in flows {
-                if flow.isPinned { pinned += 1 }
-                if flow.response != nil || flow.error != nil { saved += 1 }
                 // A flow already credited to a device is not also counted under the process
                 // that relayed it: the emulator's `netsimd` would otherwise list the device's
                 // traffic twice, once as the device and once as the relay.
@@ -235,8 +366,6 @@ struct MainView: View {
                 duplicateNames.insert(entry.app.name)
             }
             self.total = flows.count
-            self.pinned = pinned
-            self.saved = saved
             self.apps = apps.values.sorted {
                 let order = $0.app.name.localizedStandardCompare($1.app.name)
                 return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
@@ -500,6 +629,12 @@ struct MainView: View {
                     if deviceGone {
                         Text("main.deviceStopped")
                         Text("main.devicesHelp").font(.callout).foregroundStyle(.secondary)
+                    } else if case .pinned = filter.sidebarSelection, marks.pinned.isEmpty {
+                        Text("main.noPinnedEntries")
+                        Text("main.pinHint").font(.callout).foregroundStyle(.secondary)
+                    } else if case .saved = filter.sidebarSelection, marks.saved.isEmpty {
+                        Text("main.noSavedEntries")
+                        Text("main.saveHint").font(.callout).foregroundStyle(.secondary)
                     } else {
                         Text(L10n.string(flowStore.flows.isEmpty ? "main.noCapturedFlows" : "main.noMatchingFlows"))
                         Text(L10n.string(flowStore.flows.isEmpty ? "main.captureHint" : "main.filterHint"))

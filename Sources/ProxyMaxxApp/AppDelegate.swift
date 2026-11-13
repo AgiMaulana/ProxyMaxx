@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.restoreSystemProxyBeforeExit()
         model?.flushCrossToolStateBeforeExit()
         model?.ruleStore.flushRulesToDisk()
+        model?.sidebarMarks.flushToDisk()
         model?.shutdownCrashReportingBeforeExit()
     }
 
