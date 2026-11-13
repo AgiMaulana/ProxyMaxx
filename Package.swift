@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "CertKit", targets: ["CertKit"]),
         .library(name: "FlowKit", targets: ["FlowKit"]),
         .library(name: "RuleKit", targets: ["RuleKit"]),
+        .library(name: "PluginKit", targets: ["PluginKit"]),
         .library(name: "SystemKit", targets: ["SystemKit"]),
         .library(name: "LogKit", targets: ["LogKit"]),
         .library(name: "SentryKit", targets: ["SentryKit"]),
@@ -61,6 +62,18 @@ let package = Package(
             dependencies: ["FlowKit", "Branding", .product(name: "ZIPFoundation", package: "ZIPFoundation")]
         ),
 
+        // Plugin Store domain logic: .pxplugin packages, the permission registry/store,
+        // and the minimal plugin runner. RuleKit stays decoupled by taking its
+        // authorization through an injected gate instead of depending on this target.
+        .target(
+            name: "PluginKit",
+            dependencies: [
+                "Branding",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                .product(name: "Crypto", package: "swift-crypto"),
+            ]
+        ),
+
         .target(
             name: "ProxyKit",
             dependencies: [
@@ -100,7 +113,7 @@ let package = Package(
 
         .executableTarget(
             name: "ProxyMaxxApp",
-            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding", "LogKit", "SentryKit"]
+            dependencies: ["ProxyKit", "FlowKit", "CertKit", "RuleKit", "PluginKit", "SystemKit", "CodeGenKit", "ClientKit", "Branding", "LogKit", "SentryKit"]
         ),
 
         // The companion CLI (`proxymaxx-cli`), a headless driver for AI agents. It lives
@@ -151,6 +164,13 @@ let package = Package(
             ]
         ),
         .testTarget(name: "CodeGenKitTests", dependencies: ["CodeGenKit", "FlowKit"]),
+        .testTarget(
+            name: "PluginKitTests",
+            dependencies: [
+                "PluginKit", "Branding",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ]
+        ),
         .testTarget(name: "CertKitTests", dependencies: ["CertKit"]),
         .testTarget(name: "SystemKitTests", dependencies: ["SystemKit", "Branding"]),
         .testTarget(name: "LogKitTests", dependencies: ["LogKit"]),

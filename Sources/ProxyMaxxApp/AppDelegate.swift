@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         model?.restoreSystemProxyBeforeExit()
         model?.flushCrossToolStateBeforeExit()
+        model?.pluginCoordinator.stopRunningPlugins()
         model?.ruleStore.flushRulesToDisk()
         model?.sidebarMarks.flushToDisk()
         model?.shutdownCrashReportingBeforeExit()

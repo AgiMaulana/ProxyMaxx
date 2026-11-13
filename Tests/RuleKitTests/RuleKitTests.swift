@@ -270,7 +270,7 @@ final class MapLocalRuleStoreTests: XCTestCase {
     @MainActor
     func testDisablingTheToolEmptiesTheEffectiveRules() {
         let store = RuleStore()
-        store.addMapLocalRule(MapLocalRule(url: "api.example.com/*"))
+        try? store.addMapLocalRule(MapLocalRule(url: "api.example.com/*"))
         XCTAssertEqual(store.effectiveMapLocalRules.count, 1)
 
         store.isMapLocalEnabled = false
@@ -281,10 +281,10 @@ final class MapLocalRuleStoreTests: XCTestCase {
     func testDuplicateInsertsBesideTheOriginal() {
         let store = RuleStore()
         let rule = MapLocalRule(name: "one", url: "a.example.com/*")
-        store.addMapLocalRule(rule)
-        store.addMapLocalRule(MapLocalRule(name: "two", url: "b.example.com/*"))
+        try? store.addMapLocalRule(rule)
+        try? store.addMapLocalRule(MapLocalRule(name: "two", url: "b.example.com/*"))
 
-        store.duplicateMapLocalRule(id: rule.id)
+        try? store.duplicateMapLocalRule(id: rule.id)
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["one", "one copy", "two"])
     }
 
@@ -293,10 +293,10 @@ final class MapLocalRuleStoreTests: XCTestCase {
         let store = RuleStore()
         let first = MapLocalRule(name: "first", url: "a/*")
         let second = MapLocalRule(name: "second", url: "b/*")
-        store.addMapLocalRule(first)
-        store.addMapLocalRule(second)
+        try? store.addMapLocalRule(first)
+        try? store.addMapLocalRule(second)
 
-        store.moveMapLocalRules(from: IndexSet(integer: 1), to: 0)
+        try? store.moveMapLocalRules(from: IndexSet(integer: 1), to: 0)
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["second", "first"])
     }
 
@@ -304,12 +304,12 @@ final class MapLocalRuleStoreTests: XCTestCase {
     func testToggleAndRemove() {
         let store = RuleStore()
         let rule = MapLocalRule(name: "one", url: "a/*")
-        store.addMapLocalRule(rule)
+        try? store.addMapLocalRule(rule)
 
-        store.setMapLocalRule(id: rule.id, enabled: false)
+        try? store.setMapLocalRule(id: rule.id, enabled: false)
         XCTAssertEqual(store.mapLocalRules.first?.isEnabled, false)
 
-        store.removeMapLocalRules(ids: [rule.id])
+        try? store.removeMapLocalRules(ids: [rule.id])
         XCTAssertTrue(store.mapLocalRules.isEmpty)
     }
 
@@ -317,12 +317,12 @@ final class MapLocalRuleStoreTests: XCTestCase {
     func testUpdateReplacesTheRuleInPlace() {
         let store = RuleStore()
         var rule = MapLocalRule(name: "one", url: "a/*")
-        store.addMapLocalRule(rule)
-        store.addMapLocalRule(MapLocalRule(name: "two", url: "b/*"))
+        try? store.addMapLocalRule(rule)
+        try? store.addMapLocalRule(MapLocalRule(name: "two", url: "b/*"))
 
         rule.name = "renamed"
         rule.url = "c/*"
-        store.updateMapLocalRule(rule)
+        try? store.updateMapLocalRule(rule)
 
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["renamed", "two"])
         XCTAssertEqual(store.mapLocalRules.first?.url, "c/*")
@@ -331,8 +331,8 @@ final class MapLocalRuleStoreTests: XCTestCase {
     @MainActor
     func testUpdateOfAnUnknownRuleIsIgnored() {
         let store = RuleStore()
-        store.addMapLocalRule(MapLocalRule(name: "one", url: "a/*"))
-        store.updateMapLocalRule(MapLocalRule(name: "ghost", url: "z/*"))
+        try? store.addMapLocalRule(MapLocalRule(name: "one", url: "a/*"))
+        try? store.updateMapLocalRule(MapLocalRule(name: "ghost", url: "z/*"))
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["one"])
     }
 
@@ -342,14 +342,14 @@ final class MapLocalRuleStoreTests: XCTestCase {
         let first = MapLocalRule(name: "first", url: "a/*")
         let second = MapLocalRule(name: "second", url: "b/*")
         let third = MapLocalRule(name: "third", url: "c/*")
-        store.addMapLocalRule(first)
-        store.addMapLocalRule(second)
-        store.addMapLocalRule(third)
+        try? store.addMapLocalRule(first)
+        try? store.addMapLocalRule(second)
+        try? store.addMapLocalRule(third)
 
-        store.moveMapLocalRule(id: third.id, by: -1)
+        try? store.moveMapLocalRule(id: third.id, by: -1)
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["first", "third", "second"])
 
-        store.moveMapLocalRule(id: third.id, by: 1)
+        try? store.moveMapLocalRule(id: third.id, by: 1)
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["first", "second", "third"])
     }
 
@@ -357,8 +357,8 @@ final class MapLocalRuleStoreTests: XCTestCase {
     func testMoveByIdentifierBeyondTheEndIsIgnored() {
         let store = RuleStore()
         let first = MapLocalRule(name: "first", url: "a/*")
-        store.addMapLocalRule(first)
-        store.moveMapLocalRule(id: first.id, by: -1)
+        try? store.addMapLocalRule(first)
+        try? store.moveMapLocalRule(id: first.id, by: -1)
         XCTAssertEqual(store.mapLocalRules.map(\.name), ["first"])
     }
 }
@@ -376,8 +376,8 @@ final class RuleStorePersistenceTests: XCTestCase {
     func testMapLocalRulesSurviveASecondStore() {
         let url = temporaryRulesFile()
         let store = RuleStore(persistenceURL: url)
-        store.addMapLocalRule(MapLocalRule(name: "kept", url: "api.example.com/*", responseDelay: 2))
-        store.setMapLocalRule(id: store.mapLocalRules[0].id, enabled: false)
+        try? store.addMapLocalRule(MapLocalRule(name: "kept", url: "api.example.com/*", responseDelay: 2))
+        try? store.setMapLocalRule(id: store.mapLocalRules[0].id, enabled: false)
         store.flushRulesToDisk()
 
         let reloaded = RuleStore(persistenceURL: url)
@@ -392,9 +392,9 @@ final class RuleStorePersistenceTests: XCTestCase {
         let url = temporaryRulesFile()
         let store = RuleStore(persistenceURL: url)
         store.isMapLocalEnabled = false
-        store.addMapLocalRule(MapLocalRule(name: "first", url: "a/*"))
-        store.addMapLocalRule(MapLocalRule(name: "second", url: "b/*"))
-        store.moveMapLocalRule(id: store.mapLocalRules[1].id, by: -1)
+        try? store.addMapLocalRule(MapLocalRule(name: "first", url: "a/*"))
+        try? store.addMapLocalRule(MapLocalRule(name: "second", url: "b/*"))
+        try? store.moveMapLocalRule(id: store.mapLocalRules[1].id, by: -1)
         store.sslProxyingPolicy = SSLProxyingPolicy(include: ["api.example.com"], exclude: ["*.google.com"])
         store.flushRulesToDisk()
 
@@ -677,10 +677,10 @@ final class MapLocalBundleOwnershipTests: XCTestCase {
         edited.name = "edited"
         edited.url = "example.com/cart/*"
         try Data("{\"state\":\"edited\"}".utf8).write(to: URL(fileURLWithPath: edited.destination.path))
-        store.updateMapLocalRule(edited)
-        store.duplicateMapLocalRule(id: edited.id)
+        try? store.updateMapLocalRule(edited)
+        try? store.duplicateMapLocalRule(id: edited.id)
         let duplicate = try XCTUnwrap(store.mapLocalRules.last)
-        store.removeMapLocalRules(ids: [edited.id])
+        try? store.removeMapLocalRules(ids: [edited.id])
         store.flushRulesToDisk()
 
         let reloaded = RuleStore(persistenceURL: persistence)
