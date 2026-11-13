@@ -523,3 +523,12 @@
 "error.androidScriptMissing" = "The Android installer script was not found at %@.";
 "error.magiskAssetsMissing" = "PM-MAGISK-RESOURCE-001: the bundled Magisk assets are missing at %@.";
 "error.setupScriptFailed" = "The setup script exited with status %lld. Review the log above.";
+
+/* Map Local HAR import */
+"mapLocal.importHAR" = "Import HAR…";
+"mapLocal.har.previewTitle" = "Import HAR as Local Overrides";
+"mapLocal.har.previewCount" = "%lld entries to import of %lld with a response body";
+"mapLocal.har.previewHelp" = "Each entry becomes one local override: the recorded response is written into the map-local folder and the rule matches its URL with wildcard matching. No rules have changed until Import.";
+"mapLocal.har.skipNonSuccess" = "Import only successful (2xx) responses";
+"mapLocal.har.sizeColumn" = "Size";
+"mapLocal.har.noEntries" = "This HAR contains no entries with a response body that can be mapped.";
