@@ -50,9 +50,9 @@ struct MapLocalView: View {
                     saved.name = MapLocalRuleNaming.untitled(existingNames: rules.mapLocalRules.map(\.name))
                 }
                 if target.isNew {
-                    rules.addMapLocalRule(saved)
+                    perform { try rules.addMapLocalRule(saved) }
                 } else {
-                    rules.updateMapLocalRule(saved)
+                    perform { try rules.updateMapLocalRule(saved) }
                 }
                 selection = [saved.id]
                 onApply()
@@ -431,19 +431,19 @@ struct MapLocalView: View {
 
     private func duplicate(_ ids: Set<UUID>) {
         let originals = rules.mapLocalRules.filter { ids.contains($0.id) }.map(\.id)
-        for id in originals { rules.duplicateMapLocalRule(id: id) }
+        for id in originals { perform { try rules.duplicateMapLocalRule(id: id) } }
         if !originals.isEmpty { onApply() }
     }
 
     private func delete(_ ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
-        rules.removeMapLocalRules(ids: ids)
+        perform { try rules.removeMapLocalRules(ids: ids) }
         selection.subtract(ids)
         onApply()
     }
 
     private func setEnabled(_ ids: Set<UUID>, enabled: Bool) {
-        for id in ids { rules.setMapLocalRule(id: id, enabled: enabled) }
+        for id in ids { perform { try rules.setMapLocalRule(id: id, enabled: enabled) } }
         if !ids.isEmpty { onApply() }
     }
 
@@ -463,7 +463,7 @@ struct MapLocalView: View {
             guard let index = rules.mapLocalRules.firstIndex(where: { $0.id == id }) else { continue }
             let neighbor = index + offset
             if rules.mapLocalRules.indices.contains(neighbor), !selection.contains(rules.mapLocalRules[neighbor].id) {
-                rules.moveMapLocalRule(id: id, by: offset)
+                perform { try rules.moveMapLocalRule(id: id, by: offset) }
             }
         }
         onApply()

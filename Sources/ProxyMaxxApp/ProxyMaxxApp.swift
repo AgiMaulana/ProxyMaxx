@@ -64,6 +64,9 @@ struct ProxyMaxxApp: App {
                 Button("menu.mapLocal") { model.showMapLocalWindow = true }
                     .keyboardShortcut("l", modifiers: .command)
 
+                Button("menu.pluginStore") { model.showPluginStore = true }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+
                 Divider()
 
                 Button("cert.installAndroid") {

@@ -7,6 +7,7 @@ import FlowKit
 import ProxyKit
 import CertKit
 import RuleKit
+import PluginKit
 import SystemKit
 import ClientKit
 import LogKit
@@ -336,10 +337,14 @@ final class AppModel: ObservableObject {
     @Published var showAndroidDeviceGuide = false
     /// The Map Local window. Held here so both the menu and the toolbar can open it.
     @Published var showMapLocalWindow = false
+    /// The Plugin Store window. Held here so both the menu and the toolbar can open it.
+    @Published var showPluginStore = false
 
     let flowStore = FlowStore()
     /// Point the store at `Application Support` so the rule lists survive a restart.
     let ruleStore = RuleStore(persistenceURL: RuleStore.defaultPersistenceURL)
+    /// Plugin Store subsystem: installed plugins, permission decisions, the runner.
+    let pluginCoordinator = PluginCoordinator()
     /// Pinned and saved sidebar entries, also kept under `Application Support` so the
     /// collections survive a restart.
     let sidebarMarks = SidebarMarks(
@@ -401,6 +406,16 @@ final class AppModel: ObservableObject {
             useTouchIDForCertificates = storedTouchID
         } else {
             useTouchIDForCertificates = BiometricGate.isAvailable
+        }
+
+        // Plugin permission enforcement at the Local Override boundary
+        // (docs/plugin-store-phase1.md §10): a plugin caller is checked against its
+        // recorded decision before the operation runs; internal callers are never gated.
+        ruleStore.localMapAuthorizationGate = { [pluginCoordinator] pluginID, operation in
+            try pluginCoordinator.permissionManager.authorize(
+                pluginID: pluginID,
+                permissionID: PluginCoordinator.permissionID(for: operation)
+            )
         }
     }
 
@@ -649,7 +664,7 @@ final class AppModel: ObservableObject {
             destination: .file(filePath)
         )
         
-        ruleStore.addMapLocalRule(rule)
+        do { try ruleStore.addMapLocalRule(rule) } catch { lastError = error.localizedDescription }
         applyRules()
         showMapLocalWindow = true
     }
@@ -1515,19 +1530,19 @@ final class AppModel: ObservableObject {
         case .add:
             let rule = message.rule ?? MapLocalRule(url: "")
             guard !rule.url.isEmpty else { return fail("the request carried no rule") }
-            ruleStore.addMapLocalRule(rule)
+            do { try ruleStore.addMapLocalRule(rule) } catch { return fail(error.localizedDescription) }
             return CommandIPC.Result(id: message.id, ok: true, rule: rule)
         case .update:
             guard let rule = message.rule, !rule.url.isEmpty else { return fail("the request carried no rule") }
             guard ruleStore.mapLocalRules.contains(where: { $0.id == rule.id }) else {
                 return fail("no rule with id \(rule.id.uuidString)")
             }
-            ruleStore.updateMapLocalRule(rule)
+            do { try ruleStore.updateMapLocalRule(rule) } catch { return fail(error.localizedDescription) }
             return CommandIPC.Result(id: message.id, ok: true, rule: rule)
         case .remove:
             let ids = Set(matchingIndices().map { ruleStore.mapLocalRules[$0].id })
             guard !ids.isEmpty else { return fail("no rule matches the selector") }
-            ruleStore.removeMapLocalRules(ids: ids)
+            do { try ruleStore.removeMapLocalRules(ids: ids) } catch { return fail(error.localizedDescription) }
             return CommandIPC.Result(id: message.id, ok: true)
         case .enable, .disable:
             let indices = matchingIndices()
@@ -1536,17 +1551,17 @@ final class AppModel: ObservableObject {
             for index in indices {
                 var rule = ruleStore.mapLocalRules[index]
                 rule.isEnabled = enabled
-                ruleStore.updateMapLocalRule(rule)
+                do { try ruleStore.updateMapLocalRule(rule) } catch { return fail(error.localizedDescription) }
             }
             return CommandIPC.Result(id: message.id, ok: true)
         case .move:
             guard let by = message.by, by != 0,
                   let targetID = message.targetID, let id = UUID(uuidString: targetID)
             else { return fail("move needs an id and a non-zero --by") }
-            ruleStore.moveMapLocalRule(id: id, by: by)
+            do { try ruleStore.moveMapLocalRule(id: id, by: by) } catch { return fail(error.localizedDescription) }
             return CommandIPC.Result(id: message.id, ok: true)
         case .clear:
-            ruleStore.clearMapLocalRules()
+            do { try ruleStore.clearMapLocalRules() } catch { return fail(error.localizedDescription) }
             return CommandIPC.Result(id: message.id, ok: true)
         case .setToolEnabled:
             guard let tool = message.tool, let enabled = message.enabled else {
@@ -1629,7 +1644,7 @@ final class AppModel: ObservableObject {
     }
 
     private func matchingBundle(_ message: CommandIPC.Message) throws -> MapLocalBundle {
-        try MapLocalBundleState.resolve(message.targetID ?? message.targetName ?? "", in: ruleStore.currentRuleFile())
+        try MapLocalBundleState.resolve(message.targetID ?? message.targetName ?? "", in: try ruleStore.currentRuleFile())
     }
 
     /// Poll the ownership file while this window is idle so the user sees CLI serve

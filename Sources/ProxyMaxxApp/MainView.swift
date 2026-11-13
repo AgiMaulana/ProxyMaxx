@@ -47,6 +47,17 @@ struct MainView: View {
         .sheet(isPresented: $model.showMapLocalWindow) {
             MapLocalView(rules: model.ruleStore) { model.applyRules() }
         }
+        .sheet(isPresented: $model.showPluginStore) {
+            PluginStoreView(coordinator: model.pluginCoordinator)
+        }
+        .sheet(item: Binding(
+            get: { model.pluginCoordinator.activeConsentRequest },
+            set: { if $0 == nil { model.pluginCoordinator.resolveConsent(granted: false) } }
+        )) { request in
+            PluginConsentView(request: request) { granted in
+                model.pluginCoordinator.resolveConsent(granted: granted)
+            }
+        }
         .sheet(isPresented: $model.showCertificateSheet) {
             CertificatesView().environmentObject(model)
         }
@@ -469,6 +480,7 @@ struct MainView: View {
 
             Button { showSSLProxying = true } label: { Label("common.sslProxying", systemImage: "lock.shield") }
             Button { model.showMapLocalWindow = true } label: { Label("common.mapLocal", systemImage: "doc.badge.gearshape") }
+            Button { model.showPluginStore = true } label: { Label("common.plugins", systemImage: "puzzlepiece.extension") }
             Button { model.showCertificateSheet = true } label: { Label("common.certificates", systemImage: "checkmark.seal") }
             Button {
                 model.refreshAndroidDevices()

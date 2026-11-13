@@ -523,3 +523,62 @@
 "error.androidScriptMissing" = "The Android installer script was not found at %@.";
 "error.magiskAssetsMissing" = "PM-MAGISK-RESOURCE-001: the bundled Magisk assets are missing at %@.";
 "error.setupScriptFailed" = "The setup script exited with status %lld. Review the log above.";
+
+/* MARK: Plugins */
+"common.plugins" = "Plugins";
+"menu.pluginStore" = "Plugin Store…";
+
+"plugin.store.title" = "Plugin Store";
+"plugin.store.installFromPackage" = "Install from Package…";
+"plugin.store.installedCount" = "%lld installed plugin(s)";
+"plugin.store.emptyTitle" = "No plugins installed";
+"plugin.store.emptyMessage" = "Install a .pxplugin package to add a plugin. ProxyMaxx validates packages before installing, and installing never grants permissions.";
+"plugin.store.integrityTitle" = "Plugin permission state could not be verified";
+"plugin.store.integrityWarning" = "Protected operations are denied until permission state is re-established.";
+"plugin.store.table.name" = "Name";
+"plugin.store.table.version" = "Version";
+"plugin.store.table.author" = "Author";
+"plugin.store.table.permissions" = "Permissions";
+"plugin.store.table.permissionCount" = "%lld declared";
+"plugin.store.table.status" = "Status";
+"plugin.store.details" = "Details";
+
+"plugin.install.title" = "Install Plugin";
+"plugin.install.metadata" = "Version %@ by %@";
+"plugin.install.requiredPermissions" = "Required permissions";
+"plugin.install.optionalPermissions" = "Optional permissions";
+"plugin.install.note" = "Installing does not grant any permissions.";
+"plugin.install.confirm" = "Install";
+
+"plugin.details.metadata" = "About";
+"plugin.details.installedAt" = "Installed %@";
+"plugin.details.sdk" = "Requires SDK %@ — this build provides %@";
+"plugin.details.permissions" = "Permissions";
+"plugin.details.required" = "Required";
+"plugin.details.optional" = "Optional";
+"plugin.details.declaredReason" = "Reason given: %@";
+"plugin.details.runtime" = "Runtime";
+"plugin.details.run" = "Run";
+"plugin.details.stop" = "Stop";
+"plugin.details.running" = "Running";
+"plugin.details.stopped" = "Stopped";
+"plugin.details.pid" = "pid %lld";
+"plugin.details.grant" = "Grant";
+"plugin.details.revoke" = "Revoke";
+"plugin.details.uninstall" = "Uninstall";
+"plugin.details.uninstallTitle" = "Uninstall Plugin?";
+"plugin.details.uninstallMessage" = "%@ will be removed, its permissions revoked, and its recorded decisions deleted.";
+
+"plugin.status.granted" = "GRANTED";
+"plugin.status.denied" = "DENIED";
+"plugin.status.notRequested" = "NOT REQUESTED";
+"plugin.status.unavailable" = "UNAVAILABLE";
+
+"plugin.consent.title" = "Permission Request";
+"plugin.consent.subtitle" = "%@ wants to use a ProxyMaxx capability.";
+"plugin.consent.required" = "Required";
+"plugin.consent.optional" = "Optional";
+"plugin.consent.reason" = "Why it says it needs this: %@";
+"plugin.consent.note" = "You can revoke this permission at any time in the Plugin Store. Revocation applies to later operations.";
+"plugin.consent.deny" = "Deny";
+"plugin.consent.allow" = "Allow";
