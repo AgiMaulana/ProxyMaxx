@@ -532,3 +532,6 @@
 "mapLocal.har.skipNonSuccess" = "Import only successful (2xx) responses";
 "mapLocal.har.sizeColumn" = "Size";
 "mapLocal.har.noEntries" = "This HAR contains no entries with a response body that can be mapped.";
+
+/* Map Local import progress (ZIP and HAR) */
+"mapLocal.validating" = "Importing…";

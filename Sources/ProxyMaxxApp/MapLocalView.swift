@@ -172,7 +172,7 @@ struct MapLocalView: View {
             Spacer()
             if isInspecting {
                 ProgressView().controlSize(.small)
-                Text("mapLocal.bundle.validating").font(.caption)
+                Text("mapLocal.validating").font(.caption)
             } else {
                 Text(ruleCountLabel(visibleRows.count))
                     .font(.caption)
@@ -404,6 +404,7 @@ struct MapLocalView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         isInspecting = true
         Task { @MainActor in
+            defer { isInspecting = false }
             do {
                 let entries = try await Task.detached(priority: .userInitiated) {
                     try HARImporter.parse(Data(contentsOf: url))
@@ -417,7 +418,6 @@ struct MapLocalView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isInspecting = false
         }
     }
 
