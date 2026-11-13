@@ -39,7 +39,7 @@ struct ProxyMaxxApp: App {
 
     var body: some Scene {
         WindowGroup("ProxyMaxx") {
-            MainView(flowStore: model.flowStore)
+            MainView(flowStore: model.flowStore, marks: model.sidebarMarks)
                 .environmentObject(model)
                 .frame(minWidth: 1040, minHeight: 640)
                 .onAppear { appDelegate.model = model }
