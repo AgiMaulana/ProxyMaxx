@@ -609,6 +609,13 @@ struct MapLocalEditorView: View {
     @State private var canEditResponse: Bool
     @State private var errorMessage: String?
 
+    // Find bar ("Mock Response Content", ⌘F)
+    @State private var showFind = false
+    @State private var findQuery = ""
+    @State private var findMatchIndex = 0
+    @State private var findJump: MockResponseFindJump?
+    @FocusState private var findFieldFocused: Bool
+
     private static let methods = ["", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"]
 
     var body: some View {
@@ -626,6 +633,12 @@ struct MapLocalEditorView: View {
             footer
         }
         .frame(width: 880, height: 700)
+        .background {
+            Button("") { openFind() }
+                .keyboardShortcut("f", modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+        }
         .alert("mapLocal.saveErrorTitle", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -756,14 +769,15 @@ struct MapLocalEditorView: View {
                         .font(.caption)
                     }
 
-                    TextEditor(text: $responseContent)
-                        .disabled(!canEditResponse)
-                        .font(.system(.body, design: .monospaced))
+                    MockResponseTextView(text: $responseContent, isEditable: canEditResponse, findJump: findJump)
                         .frame(minHeight: 110, maxHeight: .infinity)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(Color(NSColor.textBackgroundColor))
                         .cornerRadius(6)
+                        .overlay(alignment: .topTrailing) {
+                            if showFind {
+                                findBar
+                                    .padding(6)
+                            }
+                        }
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color(NSColor.separatorColor), lineWidth: 1)
@@ -788,6 +802,108 @@ struct MapLocalEditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
         .cornerRadius(8)
+    }
+
+    // MARK: - Find in mock response content
+
+    private var findBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField(L10n.string("mapLocal.find.placeholder"), text: $findQuery)
+                .textFieldStyle(.plain)
+                .frame(width: 140)
+                .focused($findFieldFocused)
+                .onSubmit { selectFindMatch(findMatchIndex + 1) }
+                .onKeyPress(.escape) {
+                    closeFind()
+                    return .handled
+                }
+                .onChange(of: findQuery) { _, _ in selectFindMatch(0) }
+            findCountLabel
+            Button {
+                selectFindMatch(findMatchIndex - 1)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .disabled(findMatches.isEmpty)
+            .accessibilityLabel(Text("mapLocal.find.previous"))
+            Button {
+                selectFindMatch(findMatchIndex + 1)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .disabled(findMatches.isEmpty)
+            .accessibilityLabel(Text("mapLocal.find.next"))
+            Button {
+                closeFind()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("mapLocal.find.close"))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var findCountLabel: some View {
+        if findMatches.isEmpty {
+            if !findQuery.isEmpty {
+                Text("mapLocal.find.noMatches")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Text(L10n.format("mapLocal.find.matchCount", findMatchIndex + 1, findMatches.count))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func openFind() {
+        showFind = true
+        DispatchQueue.main.async { findFieldFocused = true }
+        selectFindMatch(0)
+    }
+
+    private func closeFind() {
+        showFind = false
+        findFieldFocused = false
+    }
+
+    /// Case-insensitive matches over the mock response content, as UTF-16 ranges
+    /// (what `NSTextView.selectedRange` consumes). Bounds the sweep for very large bodies.
+    private var findMatches: [NSRange] {
+        guard showFind, !findQuery.isEmpty else { return [] }
+        let content = responseContent as NSString
+        var matches: [NSRange] = []
+        var searchRange = NSRange(location: 0, length: content.length)
+        while searchRange.location < content.length, matches.count < 10_000 {
+            let found = content.range(of: findQuery, options: .caseInsensitive, range: searchRange)
+            guard found.location != NSNotFound, found.length > 0 else { break }
+            matches.append(found)
+            let next = found.location + found.length
+            searchRange = NSRange(location: next, length: content.length - next)
+        }
+        return matches
+    }
+
+    private func selectFindMatch(_ index: Int) {
+        let matches = findMatches
+        guard !matches.isEmpty else { return }
+        let wrapped = ((index % matches.count) + matches.count) % matches.count
+        findMatchIndex = wrapped
+        findJump = MockResponseFindJump(range: matches[wrapped])
     }
 
     private var footer: some View {
@@ -925,6 +1041,87 @@ struct MapLocalEditorView: View {
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Mock response text view
+
+/// A find jump: select and reveal one match inside the response editor.
+/// `id` makes each request unique so repeat jumps to the same range still fire.
+struct MockResponseFindJump: Equatable {
+    let id = UUID()
+    let range: NSRange
+}
+
+/// `NSTextView`-backed replacement for `TextEditor` over the mock response content.
+/// SwiftUI's `findNavigator` is macOS 26+ and `TextEditor` exposes no selection control,
+/// so the editor is backed by AppKit to let the find bar select and scroll to matches.
+struct MockResponseTextView: NSViewRepresentable {
+    @Binding var text: String
+    let isEditable: Bool
+    let findJump: MockResponseFindJump?
+
+    func makeCoordinator() -> Coordinator { Coordinator($text) }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        private let text: Binding<String>
+        var lastJumpID: UUID?
+        weak var textView: NSTextView?
+
+        init(_ text: Binding<String>) { self.text = text }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+        }
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.backgroundColor = .textBackgroundColor
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        // Keep JSON / HTTP message content pristine: no smart quotes, dashes, or completions.
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.smartInsertDeleteEnabled = false
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.minSize = .zero
+        textView.maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.textView = textView
+        // Push external content changes (template insert, file selection) without
+        // clobbering the caret while the user is typing in the text view itself.
+        if textView.string != text {
+            textView.string = text
+        }
+        textView.isEditable = isEditable
+        if let jump = findJump, jump.id != context.coordinator.lastJumpID {
+            context.coordinator.lastJumpID = jump.id
+            textView.selectedRange = jump.range
+            textView.scrollRangeToVisible(jump.range)
         }
     }
 }

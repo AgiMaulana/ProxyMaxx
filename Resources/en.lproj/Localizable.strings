@@ -196,6 +196,12 @@
 "mapLocal.responseContentLabel" = "Mock Response Content (HTTP Message / Body):";
 "mapLocal.insertTemplate" = "Insert Default Template";
 "mapLocal.fileHint" = "An HTTP/1.x message in the file is served whole, including status and headers. Any other file is served as the body.";
+"mapLocal.find.placeholder" = "Find";
+"mapLocal.find.matchCount" = "%1$ld of %2$ld";
+"mapLocal.find.noMatches" = "No matches";
+"mapLocal.find.previous" = "Previous match";
+"mapLocal.find.next" = "Next match";
+"mapLocal.find.close" = "Close Find";
 "mapLocal.binaryResponseHint" = "This file is not UTF-8 text. Its original bytes are preserved unless you insert a template.";
 "mapLocal.directoryHint" = "The request path is resolved inside the directory. A missing file falls through to the remote server.";
 "mapLocal.addRule" = "Add Rule";
