@@ -134,31 +134,13 @@ struct MapLocalView: View {
     }
 
     private var bundlesMenu: some View {
-        Menu("mapLocal.bundle.bundles") {
-            if rules.mapLocalBundles.isEmpty {
-                Text("mapLocal.bundle.none")
-            }
-            ForEach(rules.mapLocalBundles) { bundle in
-                Menu(bundle.displayName) {
-                    let members = bundleRules(bundle)
-                    Text(bundleStatus(bundle, members: members))
-                    Divider()
-                    Button("mapLocal.activate") {
-                        perform { try rules.activateMapLocalBundle(id: bundle.id); onApply() }
-                    }
-                    .disabled(members.isEmpty)
-                    .help("mapLocal.bundle.activateHelp")
-                    Button("mapLocal.bundle.deactivate") {
-                        perform { try rules.deactivateMapLocalBundle(id: bundle.id); onApply() }
-                    }
-                    .disabled(!members.contains(where: \.isEnabled))
-                    Button("mapLocal.bundle.exportZIP") { exportBundle(bundle) }
-                        .disabled(members.isEmpty)
-                    Divider()
-                    Button("mapLocal.bundle.remove", role: .destructive) { bundleToRemove = bundle }
-                }
-            }
-        }
+        BundlesMenu(
+            rules: rules,
+            onApply: onApply,
+            onRemoveBundle: { bundleToRemove = $0 },
+            onExportBundle: exportBundle,
+            onError: { errorMessage = $0 }
+        )
     }
 
     private var filterBar: some View {
@@ -333,19 +315,6 @@ struct MapLocalView: View {
 
     private func ruleCountLabel(_ count: Int) -> String {
         count == 1 ? L10n.string("mapLocal.ruleCountOne") : L10n.format("mapLocal.ruleCount", count)
-    }
-
-    private func bundleRules(_ bundle: MapLocalBundle) -> [MapLocalRule] {
-        let ids = Set(bundle.ruleIDs)
-        return rules.mapLocalRules.filter { ids.contains($0.id) }
-    }
-
-    private func bundleStatus(_ bundle: MapLocalBundle, members: [MapLocalRule]) -> String {
-        if rules.isMapLocalBundleActive(bundle) { return L10n.string("mapLocal.bundle.active") }
-        if members.isEmpty { return L10n.string("mapLocal.bundle.empty") }
-        let enabled = members.filter(\.isEnabled).count
-        if enabled == 0 { return L10n.string("mapLocal.bundle.inactive") }
-        return L10n.format("mapLocal.bundle.modified", enabled, members.count)
     }
 
     private func perform(_ action: () throws -> Void) {
@@ -532,6 +501,76 @@ struct MapLocalView: View {
     public static func generateDefaultFile() -> String {
         try? FileManager.default.createDirectory(at: MapLocalResponseTemplate.directory, withIntermediateDirectories: true)
         return MapLocalResponseTemplate.defaultFileURL().path
+    }
+}
+
+/// The bundles menu and its submenus live in their own `Equatable` view. The sheet's
+/// presenting view re-renders on every captured flow and on the external-owner poll, and
+/// each of those passes used to rebuild this menu — which is what closed an open hover
+/// submenu a second or two after it appeared. Comparing equal keeps SwiftUI from
+/// re-rendering the menu while a submenu is open; real rule changes still arrive through
+/// the store's `objectWillChange`.
+private struct BundlesMenu: View, Equatable {
+    @ObservedObject var rules: RuleStore
+    let onApply: () -> Void
+    let onRemoveBundle: (MapLocalBundle) -> Void
+    let onExportBundle: (MapLocalBundle) -> Void
+    let onError: (String) -> Void
+
+    static func == (lhs: BundlesMenu, rhs: BundlesMenu) -> Bool {
+        // The closures are recreated on every parent pass, so identity equality would
+        // never hold; the store is a reference, so this is the only state that matters.
+        lhs.rules === rhs.rules
+    }
+
+    var body: some View {
+        Menu("mapLocal.bundle.bundles") {
+            if rules.mapLocalBundles.isEmpty {
+                Text("mapLocal.bundle.none")
+            }
+            ForEach(rules.mapLocalBundles) { bundle in
+                Menu(bundle.displayName) {
+                    let members = bundleRules(bundle)
+                    Text(bundleStatus(bundle, members: members))
+                    Divider()
+                    Button("mapLocal.activate") {
+                        perform { try rules.activateMapLocalBundle(id: bundle.id) }
+                    }
+                    .disabled(members.isEmpty)
+                    .help("mapLocal.bundle.activateHelp")
+                    Button("mapLocal.bundle.deactivate") {
+                        perform { try rules.deactivateMapLocalBundle(id: bundle.id) }
+                    }
+                    .disabled(!members.contains(where: \.isEnabled))
+                    Button("mapLocal.bundle.exportZIP") { onExportBundle(bundle) }
+                        .disabled(members.isEmpty)
+                    Divider()
+                    Button("mapLocal.bundle.remove", role: .destructive) { onRemoveBundle(bundle) }
+                }
+            }
+        }
+    }
+
+    private func perform(_ action: () throws -> Void) {
+        do {
+            try action()
+            onApply()
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+
+    private func bundleRules(_ bundle: MapLocalBundle) -> [MapLocalRule] {
+        let ids = Set(bundle.ruleIDs)
+        return rules.mapLocalRules.filter { ids.contains($0.id) }
+    }
+
+    private func bundleStatus(_ bundle: MapLocalBundle, members: [MapLocalRule]) -> String {
+        if rules.isMapLocalBundleActive(bundle) { return L10n.string("mapLocal.bundle.active") }
+        if members.isEmpty { return L10n.string("mapLocal.bundle.empty") }
+        let enabled = members.filter(\.isEnabled).count
+        if enabled == 0 { return L10n.string("mapLocal.bundle.inactive") }
+        return L10n.format("mapLocal.bundle.modified", enabled, members.count)
     }
 }
 
