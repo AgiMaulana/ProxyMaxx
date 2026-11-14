@@ -1362,7 +1362,10 @@ final class AppModel: ObservableObject {
     /// Adopt the owning engine once, without waiting for the poll, so the first frame
     /// after launch is correct.
     func refreshExternalOwner() {
-        externalOwner = isRunning ? nil : ProxyRegistry.read()
+        let owner = isRunning ? nil : ProxyRegistry.read()
+        // Assigning an unchanged value still fires `objectWillChange`, which re-rendered
+        // the whole window every two seconds and closed any open menu mid-hover.
+        if owner != externalOwner { externalOwner = owner }
         syncAttachMode()
     }
 
