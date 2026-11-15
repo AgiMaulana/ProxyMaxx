@@ -48,6 +48,12 @@ struct ProxyMaxxApp: App {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .appInfo) {
                 Button("menu.about") { ProxyMaxxAbout.showPanel() }
+                // Where the daily window and a silent balloon end: the same check Settings
+                // runs, and an offer surfaces as the bottom-right balloon.
+                Button("menu.checkForUpdates") {
+                    model.checkForUpdatesManually()
+                }
+                .keyboardShortcut("u", modifiers: [.command])
             }
             CommandGroup(after: .appInfo) {
                 Button("menu.reportIssue") {

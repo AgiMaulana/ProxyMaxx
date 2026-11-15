@@ -171,25 +171,35 @@ still works; its crashes simply arrive unsymbolicated.
 
 ## Update checks
 
-Once a day after launch, a release build asks GitHub for the newest release:
+A release build asks GitHub for the newest release after launch. The first check waits for
+a daily window; once a release has been read, later launches revalidate with the response's
+ETag, which GitHub answers with `304 Not Modified` without counting the request against its
+rate limit:
 
 ```
 GET https://api.github.com/repos/AgiMaulana/ProxyMaxx/releases/latest
+If-None-Match: <ETag of the last response>
 User-Agent: ProxyMaxx/<installed version>
 ```
+
+The request deliberately bypasses every system proxy — including ProxyMaxx itself, whose
+listener is often the system proxy and is down exactly when this check fires — so it never
+appears in a captured session.
 
 What leaves the machine is that request alone. No identifier, no install ID, no machine
 name, no captured traffic, and no settings are attached, and the response is only read for
 a version number and a release URL. The last successful response is kept in
 `~/Library/Application Support/ProxyMaxx/Updates/latest-release.json` so a launch that
-cannot reach GitHub can still name the release it already knew about; nothing else is stored.
+cannot reach GitHub can still name the release it already knew about, and its ETag is kept
+in the app's preferences to make the next check a free revalidation; nothing else is stored.
 
 The check can be turned off completely by blocking `api.github.com` for ProxyMaxx in the
 firewall, and it is not part of the crash-reporting consent: opting out of Sentry leaves it
-running, and vice versa. Settings → Updates has a **Check Now** button, so the same request
-can be made on demand.
+running, and vice versa. Settings → Updates has a **Check Now** button, and the app menu
+has **Check for Updates…**, so the same request can be made on demand.
 
 Upgrading is never downloaded or installed by the app. An install that Homebrew owns shows
-**Upgrade Now**, which runs `brew upgrade --cask AgiMaulana/proxymaxx/proxymaxx` in the
-user's login shell; any other copy is shown the command to paste, plus a link to the release
-page. The app never replaces its own binary.
+**Upgrade Now**, which resolves the `brew` binary absolutely — a Finder-launched app's
+login shell cannot be relied on to have it on `PATH` — and runs
+`brew upgrade --cask AgiMaulana/proxymaxx/proxymaxx`; any other copy is shown the command
+to paste, plus a link to the release page. The app never replaces its own binary.

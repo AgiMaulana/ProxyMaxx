@@ -447,6 +447,7 @@
 
 /* MARK: Menus */
 "menu.about" = "About ProxyMaxx";
+"menu.checkForUpdates" = "Check for Updates…";
 "menu.clearSession" = "Clear Session";
 "menu.reportIssue" = "Report Issue…";
 "menu.mapLocal" = "Local Override…";

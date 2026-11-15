@@ -223,6 +223,124 @@ final class UpdateCheckTests: XCTestCase {
         XCTAssertTrue(HomebrewUpgrader.upgradeCommand.hasPrefix("brew upgrade --cask "))
     }
 
+    func testAKnownBrewBinaryIsUsedBeforeTheLoginShellProbe() {
+        // `/bin/ls` stands in for an existing executable, so the resolver answers it and
+        // never reaches the login-shell probe.
+        XCTAssertEqual(HomebrewUpgrader.brewPath(candidates: ["/bin/ls", "/no/such/brew"]), "/bin/ls")
+    }
+
+    func testAnUnknownBrewFallsThroughToTheLoginShellProbe() {
+        let resolved = HomebrewUpgrader.brewPath(candidates: ["/no/such/brew"])
+        // A result must be a real executable; nil is equally valid, because the machine
+        // running the tests may have no brew anywhere.
+        if let resolved {
+            XCTAssertTrue(FileManager.default.isExecutableFile(atPath: resolved), resolved)
+        }
+    }
+
+    // MARK: - Revalidation
+
+    func testUpdateRequestsBypassTheSystemProxy() {
+        let proxies = GitHubUpdateChecker.makeConfiguration().connectionProxyDictionary
+        // An empty dictionary disables proxying; nil would mean "use the system's".
+        XCTAssertEqual(proxies.map(\.count), 0)
+    }
+
+    func testETagRoundTripsAndClears() {
+        let defaults = freshDefaults()
+        XCTAssertNil(UpdateCheckState.latestETag(defaults: defaults))
+        UpdateCheckState.recordETag(#"W/"0123abcd""#, defaults: defaults)
+        XCTAssertEqual(UpdateCheckState.latestETag(defaults: defaults), #"W/"0123abcd""#)
+        UpdateCheckState.recordETag(nil, defaults: defaults)
+        XCTAssertNil(UpdateCheckState.latestETag(defaults: defaults))
+        UpdateCheckState.recordETag("", defaults: defaults)
+        XCTAssertNil(UpdateCheckState.latestETag(defaults: defaults))
+    }
+
+    func testAKnownETagMakesTheNextLaunchCheckImmediately() {
+        let defaults = freshDefaults()
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        UpdateCheckState.recordCheck(at: now, defaults: defaults)
+        XCTAssertFalse(UpdateCheckState.isCheckDue(now: now.addingTimeInterval(3_600), defaults: defaults))
+        // A conditional revalidation is free against the rate limit, so it does not wait
+        // out the daily window — a release published minutes after the last check is
+        // caught on the next launch.
+        UpdateCheckState.recordETag(#"W/"0123abcd""#, defaults: defaults)
+        XCTAssertTrue(UpdateCheckState.isCheckDue(now: now.addingTimeInterval(3_600), defaults: defaults))
+    }
+
+    func testAFullCheckStoresThePayloadAndItsETag() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = freshDefaults()
+        let checker = stubbedChecker(directory: directory, defaults: defaults) { _ in
+            (200, ["ETag": #""v0.7.0-etag""#], Self.payload(tag: "v0.7.0"))
+        }
+        let release = try await checker.fetchLatestRelease()
+        XCTAssertEqual(release.version, ReleaseVersion("0.7.0")!)
+        XCTAssertEqual(UpdateCheckState.latestETag(defaults: defaults), #""v0.7.0-etag""#)
+        XCTAssertNotNil(LatestReleasePayload.cachedRelease(directory: directory))
+    }
+
+    func testANotModifiedAnswerServesTheCachedReleaseAndSentTheETag() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = freshDefaults()
+        try LatestReleasePayload.remember(Self.payload(tag: "v0.6.0"), directory: directory)
+        UpdateCheckState.recordETag(#""v0.6.0-etag""#, defaults: defaults)
+
+        var sentETag: String?
+        let checker = stubbedChecker(directory: directory, defaults: defaults) { request in
+            sentETag = request.value(forHTTPHeaderField: "If-None-Match")
+            return (304, [:], Data())
+        }
+        let release = try await checker.fetchLatestRelease()
+        XCTAssertEqual(sentETag, #""v0.6.0-etag""#)
+        XCTAssertEqual(release.version, ReleaseVersion("0.6.0")!)
+    }
+
+    /// Answers every request the check makes from a handler, so the conditional-request
+    /// behavior is tested without GitHub on the wire.
+    private final class UpdateCheckStubProtocol: URLProtocol {
+        static var handler: ((URLRequest) -> (Int, [String: String], Data))?
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            guard let handler = Self.handler, let url = request.url else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+                return
+            }
+            let (status, headers, body) = handler(request)
+            let response = HTTPURLResponse(
+                url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            if !body.isEmpty {
+                client?.urlProtocol(self, didLoad: body)
+            }
+            client?.urlProtocolDidFinishLoading(self)
+        }
+
+        override func stopLoading() {}
+    }
+
+    private func stubbedChecker(
+        directory: URL,
+        defaults: UserDefaults,
+        handler: @escaping (URLRequest) -> (Int, [String: String], Data)
+    ) -> GitHubUpdateChecker {
+        UpdateCheckStubProtocol.handler = handler
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UpdateCheckStubProtocol.self]
+        return GitHubUpdateChecker(
+            session: URLSession(configuration: configuration),
+            cacheDirectory: directory,
+            defaults: defaults
+        )
+    }
+
     /// A throwaway `/Applications` + Caskroom pair, so the origin tests never read the real
     /// Homebrew opt directory of the machine running them.
     private struct Fixture {
@@ -244,6 +362,12 @@ final class UpdateCheckTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// A minimal `/releases/latest` payload naming `tag`.
+    private static func payload(tag: String) -> Data {
+        let json = #"{"tag_name":"\#(tag)","html_url":"https://github.com/AgiMaulana/ProxyMaxx/releases/tag/\#(tag)"}"#
+        return Data(json.utf8)
+    }
 
     private func freshDefaults() -> UserDefaults {
         let suite = "UpdateCheckTests-\(UUID().uuidString)"
