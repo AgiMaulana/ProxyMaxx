@@ -23,7 +23,7 @@ enum RuleCommand {
 
     static func run(_ arguments: Arguments) async throws {
         guard let action = arguments.positional.first else {
-            throw CLIError("rule needs an action (list|add|template|remove|enable|disable|move|clear). Run `proxymaxx-cli --help`.")
+            throw CLIError("rule needs an action (list|add|import-har|template|remove|enable|disable|move|clear). Run `proxymaxx-cli --help`.")
         }
         let body = arguments.after(action)
         switch action {
@@ -31,6 +31,8 @@ enum RuleCommand {
             try await list(body)
         case "add":
             try await add(body)
+        case "import-har":
+            try await importHar(body)
         case "template":
             try template(body)
         case "remove":
@@ -44,7 +46,7 @@ enum RuleCommand {
         case "clear":
             try await clear(body)
         default:
-            throw CLIError("unknown rule action '\(action)'", hint: "list|add|template|remove|enable|disable|move|clear")
+            throw CLIError("unknown rule action '\(action)'", hint: "list|add|import-har|template|remove|enable|disable|move|clear")
         }
     }
 
@@ -218,6 +220,113 @@ enum RuleCommand {
         let data = try JSONEncoder().encode(rule)
         FileHandle.standardOutput.write(Data(data))
         FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+
+    // MARK: - import-har
+
+    /// `rule import-har <file.har> [--include-non-success] [--dry-run]` — the CLI
+    /// counterpart of the app's Import HAR button: every HAR entry with a response
+    /// body becomes one Map Local rule whose destination is a full HTTP/1.1 response
+    /// file written into the app's map-local directory, using the same `HARImporter`
+    /// the GUI drives. Response files are shared by absolute path, so rules created
+    /// here serve identically whether the app engine or `serve` owns the proxy.
+    private static func importHar(_ arguments: Arguments) async throws {
+        guard arguments.positional.count == 1 else {
+            throw CLIError("rule import-har needs exactly one positional HAR file path", hint: "e.g. proxymaxx-cli rule import-har ~/capture.har")
+        }
+        let harURL = URL(fileURLWithPath: (arguments.positional[0] as NSString).expandingTildeInPath).standardizedFileURL
+        guard FileManager.default.fileExists(atPath: harURL.path) else {
+            throw CLIError("no HAR file at \(harURL.path)")
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: harURL)
+        } catch {
+            throw CLIError("cannot read HAR file at \(harURL.path): \(error.localizedDescription)")
+        }
+        let entries: [HAREntry]
+        do {
+            entries = try HARImporter.parse(data)
+        } catch {
+            throw CLIError("invalid HAR file at \(harURL.path): \(error.localizedDescription)")
+        }
+
+        // Mirror the GUI import: entries without a body are skipped, and by default
+        // so are responses outside 2xx. makeRule doubles as the final URL check,
+        // which is what the GUI's preview loop skips on.
+        let includeNonSuccess = arguments.has("include-non-success")
+        struct Importable {
+            let entry: HAREntry
+            let rule: MapLocalRule
+            let fileURL: URL
+        }
+        var importable: [Importable] = []
+        var skipped = 0
+        for entry in entries {
+            guard HARImporter.hasBody(entry) else { skipped += 1; continue }
+            let status = entry.response?.status ?? 0
+            if !includeNonSuccess, !(200..<300).contains(status) { skipped += 1; continue }
+            let fileURL = HARImporter.responseFileURL(for: entry, in: MapLocalResponseTemplate.directory)
+            guard let rule = HARImporter.makeRule(for: entry, responseFileURL: fileURL) else { skipped += 1; continue }
+            importable.append(Importable(entry: entry, rule: rule, fileURL: fileURL))
+        }
+
+        if arguments.has("dry-run") {
+            for item in importable {
+                // No destination file name here: the real import names files with a
+                // fresh UUID segment, so the preview's name would never match.
+                let preview: [String: Any] = [
+                    "bytes": HARImporter.bodyData(for: item.entry.response?.content)?.count ?? 0,
+                    "method": item.rule.method.displayName,
+                    "status": item.entry.response?.status ?? 0,
+                    "url": item.rule.url,
+                ]
+                let data = try JSONSerialization.data(withJSONObject: preview, options: [.sortedKeys])
+                FileHandle.standardOutput.write(data)
+                FileHandle.standardOutput.write(Data("\n".utf8))
+            }
+            note("would import \(importable.count) rule(s) from \(harURL.path)")
+            return
+        }
+
+        guard !importable.isEmpty else {
+            if !includeNonSuccess {
+                throw CLIError("no importable entries in \(harURL.path)", hint: "add --include-non-success to import responses outside 2xx too")
+            }
+            throw CLIError("no importable entries in \(harURL.path) — entries need a response with a body")
+        }
+
+        // Response files first, so a write failure never leaves a rule pointing
+        // at a missing file. `responseFileURL` names carry a fresh UUID segment,
+        // so an existing-file refusal here is effectively unreachable.
+        for item in importable {
+            do {
+                try HARImporter.writeResponse(for: item.entry, to: item.fileURL)
+            } catch {
+                throw CLIError(error.localizedDescription)
+            }
+        }
+
+        if appOwned(for: arguments) {
+            for item in importable {
+                let result = try await deliver(.add, rule: item.rule)
+                try emitRule(result?.rule ?? item.rule)
+            }
+        } else {
+            let rulesFile = resolveRulesFile(arguments)
+            var file = try loadRulesFile(rulesFile)
+            for item in importable {
+                file.mapLocalRules.append(item.rule)
+            }
+            try file.write(to: rulesFile)
+            for item in importable {
+                try emitRule(item.rule)
+            }
+        }
+
+        var summary = "imported \(importable.count) rule(s) from \(harURL.path)"
+        if skipped > 0 { summary += " (skipped \(skipped))" }
+        note(summary)
     }
 
     // MARK: - template

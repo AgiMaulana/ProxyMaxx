@@ -47,8 +47,8 @@ struct Arguments {
     }
 
     private static let booleanOptions: Set<String> = [
-        "activate", "detach", "errors-only", "fail-on-match", "follow", "force",
-        "h", "help", "host-only", "include-physical", "magisk", "no-magisk",
+        "activate", "detach", "dry-run", "errors-only", "fail-on-match", "follow", "force",
+        "h", "help", "host-only", "include-non-success", "include-physical", "magisk", "no-magisk",
         "open", "pem", "pinned", "print", "remove", "saved", "text",
     ]
 
@@ -161,6 +161,15 @@ enum Help {
       proxymaxx-cli rule add       --url PATTERN --file PATH [--method M] [--name NAME]
                                   [--style contains|wildcard|regex|exact] [--host-only]
                                   [--delay SECONDS]
+      proxymaxx-cli rule import-har <file.har> [--include-non-success] [--dry-run]
+                           Import a HAR capture as Map Local overrides: every entry
+                           with a response body becomes one rule whose destination is
+                           a full HTTP/1.1 response file written into the app's
+                           map-local directory, exactly like the GUI's Import HAR.
+                           Only 2xx responses are imported by default;
+                           --include-non-success adds the rest. --dry-run lists what
+                           would be imported as NDJSON without writing anything.
+                           Emits one NDJSON rule per import on stdout.
       proxymaxx-cli rule template  [--out PATH] [--force] [--print]
                            Write a starter HTTP/1.1 response file for Local Override.
                            With no --out, a fresh default_message_<8>.json under the
