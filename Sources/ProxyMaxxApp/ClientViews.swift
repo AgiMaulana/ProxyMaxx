@@ -46,3 +46,10 @@ struct ClientAppLabel: View {
         return text
     }
 }
+
+extension ConnectedDevice {
+    /// The SF Symbol a device row or the client column draws. One emulator glyph everywhere,
+    /// so the sidebar's Devices entry and the traffic table's Client column agree on what
+    /// `sdk gphone64 arm64 (emulator-5554)` is.
+    var symbolName: String { isEmulator ? "android" : "candybarphone" }
+}

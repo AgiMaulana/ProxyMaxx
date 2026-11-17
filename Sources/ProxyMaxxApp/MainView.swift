@@ -610,7 +610,7 @@ struct MainView: View {
 
             TableColumn("common.client") { flow in
                 if let device = flow.connectedDevice {
-                    Label(device.name, systemImage: "candybarphone")
+                    Label(device.name, systemImage: device.symbolName)
                         .font(.caption)
                         .lineLimit(1)
                         .help(device.address)

@@ -111,10 +111,28 @@ public struct ConnectedDevice: Codable, Hashable, Sendable {
     /// The address the device reached this Mac from.
     public let address: String
 
-    public init(serial: String, name: String, address: String) {
+    public init(serial: String, name: String, address: String, isEmulator: Bool = false) {
         self.serial = serial
         self.name = name
         self.address = address
+        self.isEmulator = isEmulator
+    }
+
+    /// True for an Android Studio AVD, so the client column draws the same `android` glyph
+    /// the sidebar device row does instead of a phone. Optional in the session format: a
+    /// label recorded before this field existed decodes as a physical device.
+    public var isEmulator: Bool = false
+
+    private enum CodingKeys: String, CodingKey {
+        case serial, name, address, isEmulator
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        serial = try container.decode(String.self, forKey: .serial)
+        name = try container.decode(String.self, forKey: .name)
+        address = try container.decode(String.self, forKey: .address)
+        isEmulator = try container.decodeIfPresent(Bool.self, forKey: .isEmulator) ?? false
     }
 }
 
