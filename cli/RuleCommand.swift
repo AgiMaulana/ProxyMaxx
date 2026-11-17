@@ -335,7 +335,7 @@ enum RuleCommand {
     /// app's **Insert Default Template** button inserts, so an agent can create a valid
     /// override without inventing HTTP framing.
     ///
-    /// No `--out` chooses a fresh `default_message_<8>.json` under the app's map-local
+    /// No `--out` chooses a fresh `default_message_<8>.http` under the app's map-local
     /// directory, exactly like the editor. The destination path is printed as one JSON
     /// object on stdout, ready to feed into `rule add --file`.
     private static func template(_ arguments: Arguments) throws {

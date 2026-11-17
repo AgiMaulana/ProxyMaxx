@@ -189,6 +189,11 @@ final class MIMETypeTests: XCTestCase {
     func testInferredContentTypes() {
         XCTAssertEqual(MIMEType.inferred(forPathExtension: "json").essence, "application/json")
         XCTAssertEqual(MIMEType.inferred(forPathExtension: "JSON").essence, "application/json")
+        XCTAssertEqual(
+            MIMEType.inferred(forPathExtension: "http").essence,
+            "application/json",
+            "a full HTTP exchange file defaults to JSON when its message has no Content-Type"
+        )
         XCTAssertEqual(MIMEType.inferred(forPathExtension: "html").essence, "text/html")
         XCTAssertEqual(MIMEType.inferred(forPathExtension: "svg").essence, "image/svg+xml")
         XCTAssertEqual(
