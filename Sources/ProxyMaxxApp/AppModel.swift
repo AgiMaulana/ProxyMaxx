@@ -404,6 +404,58 @@ final class AppModel: ObservableObject {
         } else {
             useTouchIDForCertificates = BiometricGate.isAvailable
         }
+        startCaptureMetricsMonitor()
+    }
+
+    // MARK: - Capture instrumentation
+
+    /// Reads the capture counters every 5 s and logs one line only when there is
+    /// something to explain: pending snapshots, drops, or a spool drain from a CLI-owned
+    /// engine. An idle session stays silent, so the report never becomes the noise it is
+    /// meant to measure. The line goes to the structured log, not the activity feed,
+    /// because republishing `activityLog` here would itself redraw the window.
+    private func startCaptureMetricsMonitor() {
+        guard captureMetricsTask == nil else { return }
+        let period: Double = 5
+        captureMetricsTask = Task { @MainActor [weak self] in
+            var previous = CaptureMetrics.shared.snapshot()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(period))
+                guard let self, !Task.isCancelled else { return }
+                let current = CaptureMetrics.shared.snapshot()
+                let backlog = current.pendingSnapshots > 0
+                    || current.droppedSnapshots > previous.droppedSnapshots
+                    || current.ingestDrains > previous.ingestDrains
+                if backlog {
+                    self.logCaptureCounters(previous: previous, current: current, seconds: period)
+                }
+                previous = current
+            }
+        }
+    }
+
+    private func logCaptureCounters(previous: CaptureMetrics.Counters, current: CaptureMetrics.Counters, seconds: Double) {
+        let enqueued = Self.rate(current.snapshotsEnqueued, previous.snapshotsEnqueued, seconds: seconds)
+        let ingested = Self.rate(current.snapshotsIngested, previous.snapshotsIngested, seconds: seconds)
+        let writes = Self.rate(current.persistenceWrites, previous.persistenceWrites, seconds: seconds)
+        let dropped = current.droppedSnapshots &- previous.droppedSnapshots
+        let message = String(
+            format: "capture: %.1f snapshots/s in, %.1f handled/s, %d pending, %llu dropped, %.1f persistence writes/s, %d flows",
+            enqueued,
+            ingested,
+            current.pendingSnapshots,
+            dropped,
+            writes,
+            current.flowCount
+        )
+        LogKit.record(message, component: "App")
+    }
+
+    /// A counter that only grows, so a reading that somehow moved backwards reports zero
+    /// rather than a wrapped rate.
+    private static func rate(_ current: UInt64, _ previous: UInt64, seconds: Double) -> Double {
+        guard current >= previous, seconds > 0 else { return 0 }
+        return Double(current - previous) / seconds
     }
 
     // MARK: - Command line
@@ -538,7 +590,16 @@ final class AppModel: ObservableObject {
             engine.sslProxyingPolicy = ruleStore.effectivePolicy
             engine.mapLocalRules = ruleStore.effectiveMapLocalRules
             engine.onEvent = { [weak self] event in
-                Task { @MainActor in self?.handle(event) }
+                // Only snapshots are counted: the backlog the UI cares about is flow
+                // traffic, and a state change or diagnostic is one cheap main-actor hop.
+                guard case .flow = event else {
+                    Task { @MainActor in self?.handle(event) }
+                    return
+                }
+                CaptureMetrics.shared.interval(CaptureSignposts.snapshotEnqueue) {
+                    CaptureMetrics.shared.recordSnapshotEnqueued()
+                    Task { @MainActor in self?.handle(event) }
+                }
             }
             // Fresh hand-off buffer before the first snapshot, so a reader never replays
             // a previous run's flows as if they were just captured.
@@ -1410,13 +1471,31 @@ final class AppModel: ObservableObject {
     /// Drain the shared spool into the visible session. Snapshots arrive oldest first;
     /// `upsert` replaces a flow in place by id, so the throttled interim snapshots and
     /// the final completed one collapse onto the same row.
+    ///
+    /// Decoding is kept inside the drain interval and the upserts inside one upsert
+    /// interval, so a baseline trace shows how much of the main-actor pass is decoding
+    /// files and how much is touching the store.
     private func ingestExternalFlows() {
-        for url in FlowSpool.pendingURLs() {
-            if let flow = FlowSpool.read(url) {
+        let urls = FlowSpool.pendingURLs()
+        guard !urls.isEmpty else { return }
+
+        var decoded: [Flow] = []
+        CaptureMetrics.shared.interval(CaptureSignposts.ingestDrain) {
+            for url in urls {
+                if let flow = FlowSpool.read(url) {
+                    decoded.append(flow)
+                }
+                FlowSpool.remove(url)
+            }
+        }
+        guard !decoded.isEmpty else { return }
+
+        CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
+            for flow in decoded {
                 flowStore.upsert(flow)
             }
-            FlowSpool.remove(url)
         }
+        CaptureMetrics.shared.recordIngestDrain(snapshots: decoded.count, flowCount: flowStore.flows.count)
     }
 
     /// Stop the CLI-owned engine and bind this app's own, the reverse of the attach path.
@@ -1455,6 +1534,8 @@ final class AppModel: ObservableObject {
     private var commandConsumerTask: Task<Void, Never>?
     /// Reads the shared flow spool while the app is attached to a CLI-owned engine.
     private var flowIngestTask: Task<Void, Never>?
+    /// Reports capture counters every 5 s while there is a backlog to explain.
+    private var captureMetricsTask: Task<Void, Never>?
 
     /// Publish ownership right after the engine binds, and consume `proxymaxx-cli rule …`
     /// requests for as long as this engine serves.
@@ -1672,9 +1753,15 @@ final class AppModel: ObservableObject {
                let device = Self.emulatorRelayDevice() {
                 DeviceAttribution.record(device, for: flow.id)
             }
-            flowStore.upsert(flow)
-            flowSpool.write(flow)
-            sessionLog.append(flow)
+            CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
+                flowStore.upsert(flow)
+            }
+            CaptureMetrics.shared.interval(CaptureSignposts.persistenceWrite) {
+                flowSpool.write(flow)
+                sessionLog.append(flow)
+            }
+            CaptureMetrics.shared.recordPersistenceWrites()
+            CaptureMetrics.shared.recordSnapshotHandled(flowCount: flowStore.flows.count)
         case .stateChanged(let running, let port):
             isRunning = running
             self.port = port
