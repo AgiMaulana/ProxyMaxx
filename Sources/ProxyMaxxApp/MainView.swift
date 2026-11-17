@@ -11,6 +11,10 @@ struct MainView: View {
     /// Observed so pinning or saving an entry redraws the sidebar and its collection rows.
     @ObservedObject var marks: SidebarMarks
     @State private var filter = FlowFilter()
+    /// Which Collections row is open and which entry is drilled into within it. The two are
+    /// kept apart so a click on an entry keeps its collection open rather than falling back
+    /// to All — see `SidebarNavigation`.
+    @State private var navigation = SidebarNavigation()
     @State private var selection: UUID?
     @State private var showSSLProxying = false
     @State private var showLog = false
@@ -87,12 +91,12 @@ struct MainView: View {
         .onReceive(flowStore.$revision) { _ in
             guard flowStore.flows.isEmpty else { return }
             selection = nil
-            switch filter.sidebarSelection {
-            case .client, .app: filter.sidebarSelection = .all
+            switch navigation.scope {
+            case .client, .app: navigation.clearScope()
             case .device(let serial) where !model.connectedDevices.contains(where: { $0.serial == serial }):
                 // The chosen emulator stopped: say so next to the empty table rather than
                 // silently widening the list back to every device's traffic.
-                filter.sidebarSelection = .all
+                navigation.clearScope()
                 deviceGone = true
             default: break
             }
@@ -108,15 +112,17 @@ struct MainView: View {
         }
     }
 
-    /// The rows the traffic table shows: the text/method/error filter, plus the sidebar
-    /// collection scope. `.pinned` and `.saved` are not flow predicates — they narrow the
-    /// list to the flows owned by the entries those collections list.
+    /// The rows the traffic table shows: the text/method/error filter, the collection scope,
+    /// and the device/app/host drilled into within that collection.
+    ///
+    /// `.pinned` and `.saved` are not flow predicates in `FlowFilter` — they narrow the list
+    /// to the flows owned by the entries those collections list — so the collection is
+    /// applied here, on top of the ordinary filter.
     private func scopedFlows() -> [Flow] {
         var effective = filter
-        let collection = filter.sidebarSelection
-        if collection == .pinned || collection == .saved { effective.sidebarSelection = .all }
+        effective.sidebarSelection = navigation.flowScope
         let base = effective.apply(to: flowStore.flows)
-        switch collection {
+        switch navigation.collection {
         case .pinned: return base.filter { marks.isPinned($0) }
         case .saved: return base.filter { marks.isSaved($0) }
         default: return base
@@ -131,7 +137,7 @@ struct MainView: View {
                 sidebarRow(L10n.string("main.saved"), systemImage: "bookmark", selection: .saved, count: marks.saved.count)
             }
 
-            switch filter.sidebarSelection {
+            switch navigation.collection {
             case .pinned:
                 pinnedSections()
             case .saved:
@@ -267,13 +273,16 @@ struct MainView: View {
         flowStore.flows.lazy.filter { entity.matches($0) }.count
     }
 
+    /// Selection for the sidebar list, which shows two kinds of tagged row: a Collections
+    /// row (All, Pinned, Saved) and an entry row (device, app, host). `SidebarNavigation`
+    /// decides what each kind of click means, so an entry click keeps its collection open.
     private var sidebarSelection: Binding<SidebarSelection?> {
         Binding(
-            get: { filter.sidebarSelection },
+            get: { navigation.highlighted },
             set: {
                 guard let selection = $0 else { return }
-                filter.sidebarSelection = selection
                 deviceGone = false
+                navigation.select(selection)
             }
         )
     }
@@ -629,10 +638,10 @@ struct MainView: View {
                     if deviceGone {
                         Text("main.deviceStopped")
                         Text("main.devicesHelp").font(.callout).foregroundStyle(.secondary)
-                    } else if case .pinned = filter.sidebarSelection, marks.pinned.isEmpty {
+                    } else if case .pinned = navigation.collection, marks.pinned.isEmpty {
                         Text("main.noPinnedEntries")
                         Text("main.pinHint").font(.callout).foregroundStyle(.secondary)
-                    } else if case .saved = filter.sidebarSelection, marks.saved.isEmpty {
+                    } else if case .saved = navigation.collection, marks.saved.isEmpty {
                         Text("main.noSavedEntries")
                         Text("main.saveHint").font(.callout).foregroundStyle(.secondary)
                     } else {

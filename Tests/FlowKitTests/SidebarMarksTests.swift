@@ -67,6 +67,65 @@ final class SidebarMarksTests: XCTestCase {
         XCTAssertEqual(marks.currentMarksFile().pinned.map(\.key), ["api.example.test"])
     }
 
+    // MARK: - Collections navigation
+
+    /// The reported bug: opening Pinned or Saved and clicking an entry dropped the app back
+    /// to the All collection with nothing selected. The entry click must keep the collection.
+    func testSelectingAnEntryKeepsItsCollectionOpen() {
+        for collection in [SidebarSelection.pinned, .saved] {
+            var navigation = SidebarNavigation()
+            navigation.select(collection)
+            XCTAssertEqual(navigation.collection, collection)
+            XCTAssertNil(navigation.scope)
+
+            navigation.select(.domain("api.example.test"))
+            XCTAssertEqual(navigation.collection, collection, "entry click must not leave \(collection)")
+            XCTAssertEqual(navigation.scope, .domain("api.example.test"))
+            XCTAssertEqual(navigation.highlighted, .domain("api.example.test"))
+        }
+    }
+
+    /// A collection row is not a flow predicate: Pinned and Saved narrow by marks instead,
+    /// so `flowScope` must not hand `.pinned` to `FlowFilter` (which tests `flow.isPinned`).
+    func testCollectionContributesNoFlowPredicate() {
+        var navigation = SidebarNavigation()
+        navigation.select(.pinned)
+        XCTAssertEqual(navigation.flowScope, .all)
+
+        navigation.select(.saved)
+        XCTAssertEqual(navigation.flowScope, .all)
+
+        navigation.select(.all)
+        XCTAssertEqual(navigation.flowScope, .all)
+    }
+
+    /// Switching collection is a fresh start: a drill-down from the previous collection
+    /// would otherwise silently narrow the new one.
+    func testSwitchingCollectionDropsTheScope() {
+        var navigation = SidebarNavigation()
+        navigation.select(.pinned)
+        navigation.select(.domain("api.example.test"))
+        XCTAssertEqual(navigation.scope, .domain("api.example.test"))
+
+        navigation.select(.saved)
+        XCTAssertEqual(navigation.collection, .saved)
+        XCTAssertNil(navigation.scope)
+        XCTAssertEqual(navigation.highlighted, .saved)
+    }
+
+    /// An entry inside All narrows All, and highlights the entry rather than the row.
+    func testEntryInsideAllNarrowsAll() {
+        var navigation = SidebarNavigation()
+        navigation.select(.client("bundle:test.app"))
+        XCTAssertEqual(navigation.collection, .all)
+        XCTAssertEqual(navigation.flowScope, .client("bundle:test.app"))
+        XCTAssertEqual(navigation.highlighted, .client("bundle:test.app"))
+
+        navigation.clearScope()
+        XCTAssertEqual(navigation.highlighted, .all)
+        XCTAssertEqual(navigation.flowScope, .all)
+    }
+
     private func flow(address: String? = nil, client: ClientApp? = nil) -> Flow {
         Flow(
             request: HTTPRequest(method: "GET", scheme: "http", host: "example.test", port: 80, path: "/capture"),
