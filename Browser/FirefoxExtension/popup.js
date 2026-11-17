@@ -21,17 +21,30 @@ const elements = {
   capture: document.getElementById("capture"),
   captureDetail: document.getElementById("capture-detail"),
   routing: document.getElementById("fact-routing"),
+  routingValue: document.getElementById("fact-routing-value"),
+  routingDot: document.getElementById("fact-routing-dot"),
   siteAccess: document.getElementById("fact-site-access"),
+  siteAccessValue: document.getElementById("fact-site-access-value"),
+  siteAccessDot: document.getElementById("fact-site-access-dot"),
   scope: document.getElementById("fact-scope"),
   privateHelp: document.getElementById("private-help"),
   app: document.getElementById("fact-app"),
+  appValue: document.getElementById("fact-app-value"),
+  appDot: document.getElementById("fact-app-dot"),
   ca: document.getElementById("fact-ca"),
+  caValue: document.getElementById("fact-ca-value"),
+  caDot: document.getElementById("fact-ca-dot"),
   port: document.getElementById("opt-port"),
   error: document.getElementById("error"),
   errorMessage: document.getElementById("error-message"),
   dismissError: document.getElementById("dismiss-error"),
   retry: document.getElementById("retry"),
   checks: document.getElementById("checks"),
+  checksOpen: document.getElementById("checks-open"),
+  checksCount: document.getElementById("checks-count"),
+  checksBack: document.getElementById("checks-back"),
+  viewMain: document.getElementById("view-main"),
+  checksView: document.getElementById("checks-view"),
 };
 
 let currentStatus = null;
@@ -118,6 +131,25 @@ function renderChecks(checks) {
       return item;
     })
   );
+
+  // Only warnings count. Checks that merely explain how capture works must never inflate
+  // the one sentence a person acts on.
+  const blockers = checks.filter(({ state: statusClass }) => statusClass === "warn").length;
+  const total = checks.length;
+  elements.checksCount.textContent =
+    blockers === 0
+      ? `${total} checks · nothing blocking`
+      : `${total} checks · ${blockers} ${blockers === 1 ? "needs" : "need"} attention`;
+  elements.checksOpen.classList.toggle("all-clear", blockers === 0);
+}
+
+/// A dot is only drawn when there is a verdict behind it. An unknown state shows none,
+/// because a colour with no reading behind it is a claim the panel cannot support.
+function setDot(dot, valueElement, state) {
+  const known = state === "ok" || state === "warn";
+  dot.hidden = !known;
+  dot.className = known ? `dot ${state}` : "dot";
+  valueElement.dataset.state = known ? state : "";
 }
 
 function renderFacts(status) {
@@ -145,6 +177,16 @@ function renderFacts(status) {
         : `port ${state.httpPort}; listener unconfirmed`;
   elements.ca.textContent = connected ? (state.caTrusted ? "app CA trusted; Firefox trust required" : "root CA not trusted") : "unknown";
 
+  const routingKnown = !status.workerFailure;
+  setDot(elements.routingDot, elements.routingValue, !routingKnown ? null : status.routingActive ? "ok" : status.captureEnabled ? "warn" : null);
+  setDot(elements.siteAccessDot, elements.siteAccessValue, status.siteAccess ? "ok" : "warn");
+  setDot(
+    elements.appDot,
+    elements.appValue,
+    !connected ? null : state.proxyListening === false ? "warn" : state.proxyListening === true ? "ok" : null
+  );
+  setDot(elements.caDot, elements.caValue, !connected ? null : state.caTrusted ? "ok" : "warn");
+
   elements.port.value = status.port === null ? "" : String(status.port);
 
   elements.capture.setAttribute("aria-pressed", String(status.captureEnabled));
@@ -171,16 +213,12 @@ function renderFacts(status) {
   } else {
     elements.captureDetail.textContent = `On: route to 127.0.0.1:${port}`;
   }
-
-  elements.retry.hidden = connected && !status.workerFailure &&
-    (!status.captureEnabled || (status.routingActive && port === state.httpPort && state.proxyListening === true));
 }
 
 function render(status) {
   if (!status || status.error) {
     showError(status?.error ?? "The extension could not read its own state.");
     elements.appState.textContent = "Unavailable";
-    elements.retry.hidden = false;
     return;
   }
 
@@ -334,6 +372,21 @@ elements.port.addEventListener("change", () => {
 
 elements.retry.addEventListener("click", () => {
   send("status");
+});
+
+/// The checks are a second view, not a list under the controls: the verdicts are the reason
+/// this panel exists, and squeezed under five facts they read as a footnote.
+function showChecks(open) {
+  elements.viewMain.hidden = open;
+  elements.checksView.hidden = !open;
+  elements.checksOpen.setAttribute("aria-expanded", String(open));
+  (open ? elements.checksBack : elements.checksOpen).focus();
+}
+
+elements.checksOpen.addEventListener("click", () => showChecks(true));
+elements.checksBack.addEventListener("click", () => showChecks(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.checksView.hidden) showChecks(false);
 });
 
 elements.dismissError.addEventListener("click", () => {

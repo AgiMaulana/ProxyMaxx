@@ -31,12 +31,21 @@ const elements = {
   mode: document.getElementById("fact-mode"),
   control: document.getElementById("fact-control"),
   app: document.getElementById("fact-app"),
+  appValue: document.getElementById("fact-app-value"),
+  appDot: document.getElementById("fact-app-dot"),
   ca: document.getElementById("fact-ca"),
+  caValue: document.getElementById("fact-ca-value"),
+  caDot: document.getElementById("fact-ca-dot"),
   localhost: document.getElementById("opt-localhost"),
   port: document.getElementById("opt-port"),
   error: document.getElementById("error"),
   retry: document.getElementById("retry"),
   checks: document.getElementById("checks"),
+  checksOpen: document.getElementById("checks-open"),
+  checksCount: document.getElementById("checks-count"),
+  checksBack: document.getElementById("checks-back"),
+  viewMain: document.getElementById("view-main"),
+  checksView: document.getElementById("checks-view"),
 };
 
 const CONTROL_LABELS = {
@@ -159,6 +168,15 @@ function showError(text) {
   elements.error.textContent = text;
 }
 
+/// A dot is only drawn when there is a verdict behind it. An unknown state shows none,
+/// because a colour with no reading behind it is a claim the panel cannot support.
+function setDot(dot, valueElement, state) {
+  const known = state === "ok" || state === "warn";
+  dot.hidden = !known;
+  dot.className = known ? `dot ${state}` : "dot";
+  valueElement.dataset.state = known ? state : "";
+}
+
 function renderChecks(checks) {
   elements.checks.replaceChildren(
     ...checks.map(({ verdict, state: statusClass, text }) => {
@@ -173,6 +191,16 @@ function renderChecks(checks) {
       return item;
     })
   );
+
+  // Only warnings count here. The summary is the sentence a person acts on, so checks that
+  // merely describe how capture works must never inflate it.
+  const blockers = checks.filter(({ state: statusClass }) => statusClass === "warn").length;
+  const total = checks.length;
+  elements.checksCount.textContent =
+    blockers === 0
+      ? `${total} checks · nothing blocking`
+      : `${total} checks · ${blockers} ${blockers === 1 ? "needs" : "need"} attention`;
+  elements.checksOpen.classList.toggle("all-clear", blockers === 0);
 }
 
 function renderFacts(status) {
@@ -195,6 +223,9 @@ function renderFacts(status) {
       : `listening on ${state.httpPort}${state.socksPort ? `, SOCKS5 ${state.socksPort}` : ""}`;
   elements.ca.textContent = connected ? (state.caTrusted ? "ready" : "root CA not trusted") : "unknown";
 
+  setDot(elements.appDot, elements.appValue, !connected ? null : state.proxyListening === false ? "warn" : "ok");
+  setDot(elements.caDot, elements.caValue, !connected ? null : state.caTrusted ? "ok" : "warn");
+
   elements.localhost.checked = status.captureLocalhost;
   // Blank means "whatever the app reports", which is the only honest reading of an empty
   // field once the value is no longer seeded with a default that can go stale.
@@ -213,10 +244,6 @@ function renderFacts(status) {
   } else {
     elements.captureDetail.textContent = `On — 127.0.0.1:${port}`;
   }
-
-  // Starting the app and reloading the extension both happen outside this panel, so
-  // re-reading the bridge has to be one click rather than closing and reopening the popup.
-  elements.retry.hidden = connected;
 }
 
 function render(status) {
@@ -372,6 +399,21 @@ try {
 
 elements.capture.addEventListener("click", () => {
   send(elements.capture.getAttribute("aria-pressed") === "true" ? "disable" : "enable");
+});
+
+/// The checks are a second view, not a list under the controls: the verdicts are the reason
+/// this panel exists, and squeezed under four facts they read as a footnote.
+function showChecks(open) {
+  elements.viewMain.hidden = open;
+  elements.checksView.hidden = !open;
+  elements.checksOpen.setAttribute("aria-expanded", String(open));
+  (open ? elements.checksBack : elements.checksOpen).focus();
+}
+
+elements.checksOpen.addEventListener("click", () => showChecks(true));
+elements.checksBack.addEventListener("click", () => showChecks(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.checksView.hidden) showChecks(false);
 });
 
 elements.localhost.addEventListener("change", () => {
