@@ -1097,7 +1097,12 @@ final class AppModel: ObservableObject {
         guard let device = AndroidToolchain.runningDevices()
             .first(where: { AndroidToolchain.isEmulatorAddress(peer) && $0.isEmulator })
         else { return nil }
-        let resolved = ConnectedDevice(serial: device.serial, name: device.displayName, address: peer)
+        let resolved = ConnectedDevice(
+            serial: device.serial,
+            name: device.displayName,
+            address: peer,
+            isEmulator: device.isEmulator
+        )
         deviceCacheLock.lock()
         deviceByAddress[peer] = resolved
         deviceCacheLock.unlock()
@@ -1121,7 +1126,8 @@ final class AppModel: ObservableObject {
         let device = ConnectedDevice(
             serial: emulator.serial,
             name: emulator.displayName,
-            address: AndroidToolchain.hostAddress(forEmulator: true)
+            address: AndroidToolchain.hostAddress(forEmulator: true),
+            isEmulator: true
         )
         deviceCacheLock.lock()
         deviceByAddress["loopback"] = device

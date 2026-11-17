@@ -95,3 +95,25 @@ final class FlowOriginTests: XCTestCase {
         )
     }
 }
+
+/// A device label recorded before `isEmulator` existed must still decode, as a phone.
+final class ConnectedDeviceDecodingTests: XCTestCase {
+    func testLabelWithoutEmulatorFlagDecodesAsPhysicalDevice() throws {
+        let json = #"{"serial":"R58M12ABCDE","name":"Pixel 9 Pro (R58M12ABCDE)","address":"10.0.2.2"}"#
+        let device = try JSONDecoder().decode(ConnectedDevice.self, from: Data(json.utf8))
+        XCTAssertEqual(device.serial, "R58M12ABCDE")
+        XCTAssertFalse(device.isEmulator)
+    }
+
+    func testEmulatorFlagRoundTrips() throws {
+        let device = ConnectedDevice(
+            serial: "emulator-5554",
+            name: "sdk gphone64 arm64 (emulator-5554)",
+            address: "10.0.2.2",
+            isEmulator: true
+        )
+        let decoded = try JSONDecoder().decode(ConnectedDevice.self, from: JSONEncoder().encode(device))
+        XCTAssertEqual(decoded, device)
+        XCTAssertTrue(decoded.isEmulator)
+    }
+}

@@ -162,7 +162,7 @@ struct FlowDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             sectionTitle("common.client")
             if let device = flow.connectedDevice {
-                Label(device.name, systemImage: "candybarphone")
+                Label(device.name, systemImage: device.symbolName)
                     .font(.callout)
                     .textSelection(.enabled)
                 keyValueTable([("client.deviceSerial", device.serial), ("client.address", device.address)])
