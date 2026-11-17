@@ -246,14 +246,34 @@ public final class GitHubUpdateChecker: @unchecked Sendable {
 
     private let session: URLSession
 
-    public init(session: URLSession? = nil) {
+    /// Where the parsed release is remembered, overridable by tests.
+    public let cacheDirectory: URL
+    /// Which preference store holds the revalidation ETag, overridable by tests.
+    private let defaults: UserDefaults
+
+    /// Ephemeral, and never proxied. The system proxy is frequently this app's own
+    /// listener, which is unreachable precisely when ProxyMaxx is not running — the exact
+    /// moment a launch fires this check — and a request to GitHub is not something the
+    /// user's captured sessions should see anyway.
+    public static func makeConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         // The cache would serve a release the user already upgraded past, and the check is
         // already rate-limited by the caller.
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
-        self.session = session ?? URLSession(configuration: configuration)
+        configuration.connectionProxyDictionary = [:]
+        return configuration
+    }
+
+    public init(
+        session: URLSession? = nil,
+        cacheDirectory: URL = LatestReleasePayload.cacheDirectory,
+        defaults: UserDefaults = .standard
+    ) {
+        self.cacheDirectory = cacheDirectory
+        self.defaults = defaults
+        self.session = session ?? URLSession(configuration: Self.makeConfiguration())
     }
 
     public func fetchLatestRelease() async throws -> LatestRelease {
@@ -275,18 +295,36 @@ public final class GitHubUpdateChecker: @unchecked Sendable {
         // Nothing about the machine travels with the request beyond what any download does.
         request.setValue("\(Brand.displayName)/\(InstalledVersion.version()?.description ?? "unbundled")",
                          forHTTPHeaderField: "User-Agent")
+        // Revalidate against the release the last check saw. GitHub answers 304 when
+        // nothing changed and does not count a 304 against the rate limit, so a new
+        // release published minutes after the previous check is caught on the very next
+        // launch instead of when the daily window reopens.
+        if let etag = UpdateCheckState.latestETag(defaults: defaults) {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 throw UpdateCheckError.malformedResponse("the response is not HTTP")
             }
-            guard http.statusCode == 200 else {
+            switch http.statusCode {
+            case 200:
+                // Only a well-formed release is remembered, so the fallback can never
+                // serve a half-written or foreign payload.
+                try LatestReleasePayload.remember(data, directory: cacheDirectory)
+                UpdateCheckState.recordETag(http.value(forHTTPHeaderField: "ETag"), defaults: defaults)
+                return try LatestReleasePayload.release(from: data)
+            case 304:
+                // Nothing changed: the cached release is still the newest one.
+                guard let cached = LatestReleasePayload.cachedRelease(directory: cacheDirectory) else {
+                    throw UpdateCheckError.malformedResponse(
+                        "GitHub answered 304 but no release is cached"
+                    )
+                }
+                return cached
+            default:
                 throw UpdateCheckError.transport("GitHub answered \(http.statusCode)")
             }
-            // Only a well-formed release is remembered, so the fallback can never serve a
-            // half-written or foreign payload.
-            try LatestReleasePayload.remember(data)
-            return try LatestReleasePayload.release(from: data)
         } catch let error as UpdateCheckError {
             throw error
         } catch {
@@ -303,8 +341,9 @@ public final class GitHubUpdateChecker: @unchecked Sendable {
 public enum UpdateCheckState {
     public static let lastCheckDefaultsKey = "ProxyMaxxLastUpdateCheck"
     public static let dismissedVersionDefaultsKey = "ProxyMaxxDismissedUpdateVersion"
-    /// One check a day. The GitHub endpoint treats an unauthenticated client as 60 requests
-    /// an hour, so this is far below any limit and the app never appears to poll.
+    public static let latestETagDefaultsKey = "ProxyMaxxLatestUpdateETag"
+    /// One full check a day. The GitHub endpoint treats an unauthenticated client as 60
+    /// requests an hour, so this is far below any limit and the app never appears to poll.
     public static let interval: TimeInterval = 24 * 60 * 60
     /// A manually triggered check from Settings ignores the interval only after this long,
     /// so a double click cannot burn two requests.
@@ -318,11 +357,17 @@ public enum UpdateCheckState {
         !(ProcessInfo.processInfo.environment[smokeTestVariable] ?? "").isEmpty
     }
 
+    /// Whether this launch should ask GitHub. A first-ever check is a full request, so it
+    /// stays behind the daily window. Once an ETag is known the check is a conditional
+    /// revalidation, and a 304 answer costs nothing against the rate limit — so those run
+    /// on every launch and a release published moments after the last check is caught the
+    /// next time the app starts.
     public static func isCheckDue(
         now: Date = Date(),
         defaults: UserDefaults = .standard
     ) -> Bool {
-        lastCheck(defaults: defaults).map { now.timeIntervalSince($0) >= interval } ?? true
+        if latestETag(defaults: defaults) != nil { return true }
+        return lastCheck(defaults: defaults).map { now.timeIntervalSince($0) >= interval } ?? true
     }
 
     public static func isManualCheckAllowed(
@@ -338,6 +383,20 @@ public enum UpdateCheckState {
 
     public static func recordCheck(at date: Date = Date(), defaults: UserDefaults = .standard) {
         defaults.set(date, forKey: lastCheckDefaultsKey)
+    }
+
+    /// The ETag of the release payload the last successful check read, which turns the
+    /// next check into a free conditional revalidation.
+    public static func latestETag(defaults: UserDefaults = .standard) -> String? {
+        defaults.string(forKey: latestETagDefaultsKey)
+    }
+
+    public static func recordETag(_ etag: String?, defaults: UserDefaults = .standard) {
+        if let etag, !etag.isEmpty {
+            defaults.set(etag, forKey: latestETagDefaultsKey)
+        } else {
+            defaults.removeObject(forKey: latestETagDefaultsKey)
+        }
     }
 
     public static func dismissedVersion(defaults: UserDefaults = .standard) -> ReleaseVersion? {
@@ -396,6 +455,15 @@ public enum UpdatePlan {
 /// sources the login profile, which is where the user's `brew` is set up.
 public enum HomebrewUpgrader {
     public static let shell = "/bin/zsh"
+    /// The prefixes Homebrew installs itself to, in the order a Mac normally has them.
+    /// A login shell cannot be trusted to find `brew`: the PATH often comes from `.zshrc`,
+    /// which the non-interactive `zsh -lc` used here never reads, so an upgrade is always
+    /// launched with an absolute brew path resolved below rather than a bare `brew`.
+    public static let knownBrewPaths = [
+        "/opt/homebrew/bin/brew",
+        "/usr/local/bin/brew",
+    ]
+    /// The command shown for copying; the executed upgrade resolves `brew` absolutely.
     public static let upgradeCommand = "brew upgrade --cask \(InstallOriginDetector.caskReference)"
 
     public struct Outcome: Equatable, Sendable {
@@ -413,18 +481,43 @@ public enum HomebrewUpgrader {
         }
     }
 
+    /// Resolves `brew` without trusting the login profile's PATH: the known prefixes
+    /// first, then `command -v` under the login shell for a Homebrew living somewhere
+    /// unusual. A Finder-launched app inherits no `PATH`, and the login profile is only a
+    /// fallback because `.zshrc` — where many setups export it — is never read here.
+    public static func brewPath(
+        candidates: [String] = knownBrewPaths,
+        fileManager: FileManager = .default
+    ) -> String? {
+        if let known = candidates.first(where: { fileManager.isExecutableFile(atPath: $0) }) {
+            return known
+        }
+        guard let result = try? Shell.run(shell, ["-lc", "command -v brew"]) else { return nil }
+        guard result.succeeded else { return nil }
+        let resolved = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `command -v` answers one path when brew exists; anything multiline is noise.
+        guard !resolved.isEmpty, !resolved.contains("\n") else { return nil }
+        return resolved
+    }
+
     /// True when a `brew` answers at all. A copy installed by Homebrew always has one, so
-    /// this only guards against a brew that was since removed or is not on the login `PATH`.
+    /// this only guards against a brew that was since removed.
     public static func isAvailable() -> Bool {
-        guard let result = try? Shell.run(shell, ["-lc", "command -v brew"]) else { return false }
-        return result.succeeded && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        brewPath() != nil
     }
 
     /// Runs the upgrade with `HOMEBREW_NO_AUTO_UPDATE=1`: the cask's own metadata is
     /// refreshed by the tap, and the unconditional auto-update would turn a one-cask upgrade
     /// into a multi-minute Homebrew update the user did not ask for.
     public static func upgrade() -> Outcome {
-        let script = "HOMEBREW_NO_AUTO_UPDATE=1 \(upgradeCommand)"
+        guard let brew = brewPath() else {
+            return Outcome(
+                succeeded: false,
+                output: "Homebrew was not found on this Mac, so the upgrade cannot run.",
+                brewMissing: true
+            )
+        }
+        let script = "HOMEBREW_NO_AUTO_UPDATE=1 \(brew) upgrade --cask \(InstallOriginDetector.caskReference)"
         guard let result = try? Shell.run(shell, ["-lc", script]) else {
             return Outcome(succeeded: false, output: "The update command could not be started.", brewMissing: true)
         }

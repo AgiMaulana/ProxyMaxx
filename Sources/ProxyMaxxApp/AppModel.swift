@@ -170,10 +170,11 @@ final class AppModel: ObservableObject {
     /// True when "Upgrade Now" is a real option rather than a command to copy.
     var canRunUpdate: Bool { installOrigin == .homebrew && !updateUpgradeInFlight }
 
-    /// Decides the install origin once, then asks GitHub only when the daily window is open
-    /// and there is a version to compare against. The request is what makes macOS ask for
-    /// network access on a fresh install, so it happens while the window is on screen rather
-    /// than on the user's first captured flow.
+    /// Decides the install origin once, then asks GitHub when a check is due: the first
+    /// ever check waits for its daily window, and once an ETag is known every launch
+    /// revalidates for free (see `UpdateCheckState.isCheckDue`). The request is what makes
+    /// macOS ask for network access on a fresh install, so it happens while the window is
+    /// on screen rather than on the user's first captured flow.
     func checkForUpdatesIfNeeded() {
         installOrigin = InstallOriginDetector.origin(bundleURL: Bundle.main.bundleURL)
         #if DEBUG
@@ -265,11 +266,12 @@ final class AppModel: ObservableObject {
                 UpdateCheckState.recordCheck()
                 if UpdateCheckState.shouldOffer(release, installed: installed) {
                     availableUpdate = release
-                    if manual {
-                        updateCheckMessage = L10n.format("update.check.available", release.version.description)
-                    } else {
-                        showUpdatePrompt = true
-                    }
+                    updateCheckMessage = manual
+                        ? L10n.format("update.check.available", release.version.description)
+                        : nil
+                    // A check from the menu has no message row to land in: the balloon is
+                    // the visible answer, for that entry point and Settings alike.
+                    showUpdatePrompt = true
                 } else {
                     availableUpdate = nil
                     if manual {
