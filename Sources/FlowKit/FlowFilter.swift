@@ -15,6 +15,62 @@ public enum SidebarSelection: Hashable, Equatable, Sendable, Codable {
     case domain(String)
     /// One connected emulator or device, selected by `adb` serial.
     case device(String)
+
+    /// True for the Collections rows themselves, as opposed to an entry inside one.
+    public var isCollection: Bool {
+        switch self {
+        case .all, .pinned, .saved: return true
+        case .app, .client, .domain, .device: return false
+        }
+    }
+}
+
+/// The sidebar's two-level selection: which Collections row is open, and which entry
+/// inside it is drilled into.
+///
+/// These live apart because they answer different questions. One slot for both meant a
+/// click on a pinned or saved entry overwrote the collection that held it, dropping the
+/// list back to All. `scope` is `nil` when no entry is drilled into, so the collection
+/// alone decides what the table shows.
+public struct SidebarNavigation: Equatable, Sendable {
+    public var collection: SidebarSelection
+    public var scope: SidebarSelection?
+
+    public init(collection: SidebarSelection = .all, scope: SidebarSelection? = nil) {
+        self.collection = collection
+        self.scope = scope
+    }
+
+    /// The entity predicate to hand `FlowFilter`. A collection row is not a flow
+    /// predicate — Pinned and Saved narrow by the marks instead — so it contributes none.
+    public var flowScope: SidebarSelection {
+        guard let scope, !scope.isCollection else { return .all }
+        return scope
+    }
+
+    /// What the list highlights: the drilled-in entry when there is one, else the
+    /// collection row.
+    public var highlighted: SidebarSelection {
+        scope ?? collection
+    }
+
+    /// Apply a click on a tagged sidebar row.
+    ///
+    /// A collection row opens that collection and drops any drill-down. An entry row
+    /// narrows whichever collection is already open, leaving it open.
+    public mutating func select(_ selection: SidebarSelection) {
+        if selection.isCollection {
+            collection = selection
+            scope = nil
+        } else {
+            scope = selection
+        }
+    }
+
+    /// Drop a drill-down that no longer resolves, keeping the collection open.
+    public mutating func clearScope() {
+        scope = nil
+    }
 }
 
 /// Text, method, error and sidebar filtering applied to the captured flow list.

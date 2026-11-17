@@ -56,6 +56,9 @@ core.*
 .env.*
 *.pem
 *.p12
+# Repo-local gh config, used to authenticate tooling as a specific GitHub account.
+# It holds an oauth token, so it must never be committed.
+.gh-config/
 
 # Editor / tooling
 .vscode/
