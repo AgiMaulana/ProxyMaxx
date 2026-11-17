@@ -732,7 +732,7 @@ final class MapLocalResponseTemplateTests: XCTestCase {
         let url = MapLocalResponseTemplate.defaultFileURL(in: directory)
         XCTAssertEqual(url.deletingLastPathComponent().path, directory.path)
         XCTAssertTrue(url.lastPathComponent.hasPrefix("default_message_"))
-        XCTAssertEqual(url.pathExtension, "json")
+        XCTAssertEqual(url.pathExtension, "http")
     }
 
     func testWriteCreatesMissingParentDirectories() throws {

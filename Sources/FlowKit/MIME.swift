@@ -80,7 +80,7 @@ public struct MIMEType: Codable, Hashable, Sendable {
         case "html", "htm": essence = "text/html"
         case "css": essence = "text/css"
         case "js", "mjs", "cjs": essence = "text/javascript"
-        case "json", "map": essence = "application/json"
+        case "json", "map", "http": essence = "application/json"
         case "xml", "plist", "xhtml": essence = "application/xml"
         case "svg": essence = "image/svg+xml"
         case "txt", "text", "log", "md", "markdown", "csv", "tsv", "yaml", "yml", "ini", "conf": essence = "text/plain"

@@ -320,11 +320,12 @@ proxymaxx-cli flows --filter '/v1/user/profile' --flow-mode full
 # 3. Create a valid override response, then map the URL to it. The engine reloads
 #    without a restart. The template is a full HTTP/1.1 message: status and headers,
 #    a blank line, then the JSON body. Edit the body below that blank line.
-proxymaxx-cli rule template --out /tmp/stub-profile.json
-#    -> {"bytes":103,"path":"/tmp/stub-profile.json","template":"http-response"}
-proxymaxx-cli rule add --url 'api.example.com/v1/user/profile' --file /tmp/stub-profile.json
+#    The .http extension marks the file as a whole message; a .json file is a body.
+proxymaxx-cli rule template --out /tmp/stub-profile.http
+#    -> {"bytes":103,"path":"/tmp/stub-profile.http","template":"http-response"}
+proxymaxx-cli rule add --url 'api.example.com/v1/user/profile' --file /tmp/stub-profile.http
 #    Prefer to build the file yourself? Print the same bytes and redirect:
-#    proxymaxx-cli rule template --print > /tmp/my-stub.json
+#    proxymaxx-cli rule template --print > /tmp/my-stub.http
 
 # 4. Repeat the request. The flow reports mappedLocally=true and the rule name.
 proxymaxx-cli flows --filter '/v1/user/profile'

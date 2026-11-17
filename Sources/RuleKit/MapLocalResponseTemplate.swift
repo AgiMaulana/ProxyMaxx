@@ -27,9 +27,9 @@ public enum MapLocalResponseTemplate {
         Brand.supportDirectory.appendingPathComponent("map-local", isDirectory: true)
     }
 
-    /// A unique response path in ``directory``, matching the app's `default_message_<8>.json`.
+    /// A unique response path in ``directory``, matching the app's `default_message_<8>.http`.
     public static func defaultFileURL(in directory: URL = directory) -> URL {
-        directory.appendingPathComponent("default_message_\(UUID().uuidString.prefix(8)).json")
+        directory.appendingPathComponent("default_message_\(UUID().uuidString.prefix(8)).http")
     }
 
     /// Write the template to `url` — a new unique file in ``directory`` when nil — creating
