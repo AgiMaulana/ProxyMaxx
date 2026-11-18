@@ -104,11 +104,19 @@ public final class FlowStore: ObservableObject {
         guard !flows.isEmpty else { return }
 
         for flow in flows {
-            if let index = indexByID[flow.id] {
-                self.flows[index] = flow
+            var toInsert = flow
+            if let index = indexByID[toInsert.id] {
+                let currentRev = self.flows[index].revision ?? 0
+                if (toInsert.revision ?? 0) <= currentRev {
+                    toInsert.revision = currentRev &+ 1
+                }
+                self.flows[index] = toInsert
             } else {
-                indexByID[flow.id] = self.flows.count
-                self.flows.append(flow)
+                if toInsert.revision == nil {
+                    toInsert.revision = 0
+                }
+                indexByID[toInsert.id] = self.flows.count
+                self.flows.append(toInsert)
             }
         }
 
@@ -134,6 +142,7 @@ public final class FlowStore: ObservableObject {
         indexByID.removeAll()
         pinnedIDs.removeAll()
         selectedFlowID = nil
+        DecodedBodyCache.shared.clear()
         publishNow()
     }
 

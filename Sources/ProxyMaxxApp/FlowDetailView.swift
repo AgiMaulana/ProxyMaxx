@@ -217,7 +217,7 @@ struct FlowDetailView: View {
                 ("common.version", flow.request.httpVersion),
             ])
             headersSection("inspector.requestHeaders", flow.request.headers)
-            bodySection("inspector.requestBody", data: flow.request.body, contentType: flow.request.contentType, encoding: flow.request.contentEncoding, isTruncated: flow.isRequestBodyTruncated)
+            bodySection("inspector.requestBody", data: flow.request.body, contentType: flow.request.contentType, encoding: flow.request.contentEncoding, isTruncated: flow.isRequestBodyTruncated, isRequest: true)
         }
     }
 
@@ -244,7 +244,8 @@ struct FlowDetailView: View {
                     contentType: response.contentType,
                     encoding: response.contentEncoding,
                     isTruncated: flow.isResponseBodyTruncated,
-                    isStreaming: flow.isStreamingResponse == true
+                    isStreaming: flow.isStreamingResponse == true,
+                    isRequest: false
                 )
                 if let messages = flow.webSocketMessages, !messages.isEmpty {
                     webSocketSection(messages)
@@ -356,11 +357,18 @@ struct FlowDetailView: View {
         contentType: MIMEType?,
         encoding: String? = nil,
         isTruncated: Bool = false,
-        isStreaming: Bool = false
+        isStreaming: Bool = false,
+        isRequest: Bool = false
     ) -> some View {
-        // Decode once, here, so every mode below (preview, pretty, raw, hex) sees the
-        // payload the server actually produced rather than its compressed form.
-        let decoded = ContentDecoding.decode(data, encoding: encoding)
+        // Decode once per flow revision and cache the result, so every mode below
+        // (preview, pretty, raw, hex) sees the payload without re-decompressing on every redraw.
+        let decoded = DecodedBodyCache.shared.decoded(
+            data: data,
+            encoding: encoding,
+            flowID: flow.id,
+            revision: flow.revision ?? 0,
+            isRequest: isRequest
+        )
         let displayData = decoded ?? data
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -388,7 +396,7 @@ struct FlowDetailView: View {
                 .labelsHidden()
                 .frame(width: 190)
             }
-            BodyPayloadView(data: displayData, contentType: contentType, mode: bodyMode)
+            BodyPayloadView(data: displayData, contentType: contentType, mode: bodyMode, version: flow.revision ?? 0)
                 .equatable()
         }
     }
@@ -398,15 +406,25 @@ struct FlowDetailView: View {
 ///
 /// `Equatable` so SwiftUI skips the decode and format work when the inspector is
 /// redrawn with an unchanged body. The traffic list redraws up to ten times a second
-/// while capture runs, and re-parsing a large body on every one of those redraws was
-/// the dominant cost in the inspector.
+/// while capture runs, so equality avoids full-buffer byte scans by comparing the
+/// flow revision, byte count, and a preview slice.
 private struct BodyPayloadView: View, Equatable {
     let data: Data
     let contentType: MIMEType?
     let mode: BodyMode
+    var version: Int = 0
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.data == rhs.data && lhs.contentType == rhs.contentType && lhs.mode == rhs.mode
+        guard lhs.mode == rhs.mode,
+              lhs.contentType == rhs.contentType,
+              lhs.version == rhs.version,
+              lhs.data.count == rhs.data.count else {
+            return false
+        }
+        guard lhs.data.count > 0 else { return true }
+        // Fast comparison of preview slice (up to 512 bytes) rather than comparing entire large buffers
+        let sliceLength = min(lhs.data.count, 512)
+        return lhs.data.prefix(sliceLength) == rhs.data.prefix(sliceLength)
     }
 
     private var previewLimit: Int {

@@ -41,6 +41,9 @@ public struct Flow: Identifiable, Codable, Sendable {
     public var responseBodyTruncated: Bool?
     /// True when the response was detected as streaming (e.g. MJPEG, SSE, or long-lived media).
     public var isStreamingResponse: Bool?
+    /// Bumped whenever a flow's contents or state change. Used for fast caching
+    /// of decoded bodies and preview diffing.
+    public var revision: Int? = 0
 
     public init(
         id: UUID = UUID(),
@@ -59,7 +62,8 @@ public struct Flow: Identifiable, Codable, Sendable {
         comment: String? = nil,
         requestBodyTruncated: Bool? = nil,
         responseBodyTruncated: Bool? = nil,
-        isStreamingResponse: Bool? = nil
+        isStreamingResponse: Bool? = nil,
+        revision: Int? = 0
     ) {
         self.id = id
         self.request = request
@@ -78,6 +82,7 @@ public struct Flow: Identifiable, Codable, Sendable {
         self.requestBodyTruncated = requestBodyTruncated
         self.responseBodyTruncated = responseBodyTruncated
         self.isStreamingResponse = isStreamingResponse
+        self.revision = revision
     }
 
     public var isRequestBodyTruncated: Bool { requestBodyTruncated == true }
