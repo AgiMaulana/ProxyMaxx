@@ -102,6 +102,8 @@ public final class ProxyEngine: @unchecked Sendable {
     private var serverChannel: Channel?
     private var socksChannel: Channel?
     private let ownsGroup: Bool
+    private var isGroupShutdown = false
+    private let groupShutdownLock = NSLock()
 
     public init(
         configuration: ProxyConfiguration = ProxyConfiguration(),
@@ -138,7 +140,13 @@ public final class ProxyEngine: @unchecked Sendable {
         let socks = socksChannel
         let group = self.group
         let owns = ownsGroup
-        guard httpChannel != nil || socks != nil || owns else { return }
+
+        groupShutdownLock.lock()
+        let alreadyShutdown = isGroupShutdown
+        isGroupShutdown = true
+        groupShutdownLock.unlock()
+
+        guard httpChannel != nil || socks != nil || (owns && !alreadyShutdown) else { return }
 
         // This routinely runs on an event loop: NIO futures and channel callbacks hold the
         // engine, and their last release happens there. Waiting on a channel from inside a
@@ -148,7 +156,7 @@ public final class ProxyEngine: @unchecked Sendable {
         DispatchQueue.global().async {
             try? httpChannel?.close().wait()
             try? socks?.close().wait()
-            if owns {
+            if owns && !alreadyShutdown {
                 try? group.syncShutdownGracefully()
             }
         }
@@ -241,6 +249,7 @@ public final class ProxyEngine: @unchecked Sendable {
     }
 
     public func stop() {
+        defer { shutdownOwnedGroup() }
         guard let channel = serverChannel else { return }
         logger.info("stopping proxy", metadata: ["port": .stringConvertible(configuration.port)])
         try? channel.close().wait()
@@ -251,6 +260,28 @@ public final class ProxyEngine: @unchecked Sendable {
         socksChannel = nil
         boundSocksPort = nil
         onEvent?(.stateChanged(isRunning: false, port: configuration.port))
+    }
+
+    private func shutdownOwnedGroup() {
+        guard ownsGroup else { return }
+        groupShutdownLock.lock()
+        defer { groupShutdownLock.unlock() }
+        guard !isGroupShutdown else { return }
+        isGroupShutdown = true
+
+        var isInLoop = false
+        var iterator = group.makeIterator()
+        while let loop = iterator.next() {
+            if loop.inEventLoop {
+                isInLoop = true
+                break
+            }
+        }
+        if isInLoop {
+            group.shutdownGracefully { _ in }
+        } else {
+            try? group.syncShutdownGracefully()
+        }
     }
 
     public func waitUntilClosed() throws {

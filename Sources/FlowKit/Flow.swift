@@ -107,6 +107,18 @@ public struct Flow: Identifiable, Codable, Sendable {
     }
     /// True when this response came from a Map Local rule rather than the network.
     public var isMappedLocally: Bool { localMapSource != nil }
+
+    /// Approximate in-memory payload bytes for this flow (request body, response body, and WebSocket frames).
+    public var payloadBytes: Int {
+        var count = request.body.count
+        if let response { count += response.body.count }
+        if let webSocketMessages {
+            for message in webSocketMessages {
+                count += message.payload.count
+            }
+        }
+        return count
+    }
     public var state: FlowState {
         if error != nil { return .failed }
         if response != nil { return .completed }
