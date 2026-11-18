@@ -219,6 +219,16 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
         headers.remove(name: "Proxy-Connection")
         headers["Host"] = resolved.hostHeader
 
+        let capturedBody: Data
+        let isRequestTruncated: Bool?
+        if body.count > engine.configuration.maxCapturedRequestBodyBytes {
+            capturedBody = body.prefix(engine.configuration.maxCapturedRequestBodyBytes)
+            isRequestTruncated = true
+        } else {
+            capturedBody = body
+            isRequestTruncated = nil
+        }
+
         var timing = FlowTiming()
         timing.requestSent = Date()
         let request = HTTPRequest(
@@ -229,7 +239,7 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
             path: resolved.path,
             httpVersion: head.version.flowString,
             headers: headers,
-            body: body
+            body: capturedBody
         )
         let recorder = FlowRecorder(
             flow: Flow(
@@ -237,8 +247,10 @@ final class HTTPForwardHandler: ChannelInboundHandler, RemovableChannelHandler {
                 timing: timing,
                 isIntercepted: resolved.isIntercepted,
                 clientApp: clientApp,
-                clientAddress: Self.clientAddress(channel)
+                clientAddress: Self.clientAddress(channel),
+                requestBodyTruncated: isRequestTruncated
             ),
+            configuration: engine.configuration,
             onEmit: { flow in engine.emitFlow(flow) }
         )
 

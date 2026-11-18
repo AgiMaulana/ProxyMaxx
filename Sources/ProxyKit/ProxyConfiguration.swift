@@ -18,6 +18,14 @@ public struct ProxyConfiguration: Sendable {
     public var verifyUpstreamCertificates: Bool
     /// Requests with bodies larger than this are rejected.
     public var maxRequestBodyBytes: Int
+    /// Maximum body bytes captured for a request before truncating capture.
+    public var maxCapturedRequestBodyBytes: Int
+    /// Maximum body bytes captured for a regular response before truncating capture.
+    public var maxCapturedResponseBodyBytes: Int
+    /// Maximum body bytes captured for a streaming response (e.g. MJPEG, SSE, long-lived media).
+    public var streamingBodyCaptureBytes: Int
+    /// Maximum captured live response body bytes after which body-driven throttled snapshots stop emitting until completion.
+    public var liveBodyEmitBytes: Int
     /// Time allowed to establish an upstream connection.
     public var connectTimeoutSeconds: Int
     /// Time allowed for an upstream response to complete.
@@ -29,6 +37,10 @@ public struct ProxyConfiguration: Sendable {
         socksPort: Int? = 8989,
         verifyUpstreamCertificates: Bool = false,
         maxRequestBodyBytes: Int = 64 * 1024 * 1024,
+        maxCapturedRequestBodyBytes: Int = 8 * 1024 * 1024,
+        maxCapturedResponseBodyBytes: Int = 8 * 1024 * 1024,
+        streamingBodyCaptureBytes: Int = 256 * 1024,
+        liveBodyEmitBytes: Int = 512 * 1024,
         connectTimeoutSeconds: Int = 15,
         requestTimeoutSeconds: Int = 120
     ) {
@@ -37,6 +49,10 @@ public struct ProxyConfiguration: Sendable {
         self.socksPort = socksPort
         self.verifyUpstreamCertificates = verifyUpstreamCertificates
         self.maxRequestBodyBytes = maxRequestBodyBytes
+        self.maxCapturedRequestBodyBytes = maxCapturedRequestBodyBytes
+        self.maxCapturedResponseBodyBytes = maxCapturedResponseBodyBytes
+        self.streamingBodyCaptureBytes = streamingBodyCaptureBytes
+        self.liveBodyEmitBytes = liveBodyEmitBytes
         self.connectTimeoutSeconds = connectTimeoutSeconds
         self.requestTimeoutSeconds = requestTimeoutSeconds
     }

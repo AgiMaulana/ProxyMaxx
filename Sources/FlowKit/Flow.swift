@@ -35,6 +35,12 @@ public struct Flow: Identifiable, Codable, Sendable {
     public var isPinned: Bool
     public var colorTag: Int?
     public var comment: String?
+    /// True when the captured request body was truncated due to capture limits.
+    public var requestBodyTruncated: Bool?
+    /// True when the captured response body was truncated due to capture limits.
+    public var responseBodyTruncated: Bool?
+    /// True when the response was detected as streaming (e.g. MJPEG, SSE, or long-lived media).
+    public var isStreamingResponse: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -50,7 +56,10 @@ public struct Flow: Identifiable, Codable, Sendable {
         webSocketMessages: [WebSocketMessage]? = nil,
         isPinned: Bool = false,
         colorTag: Int? = nil,
-        comment: String? = nil
+        comment: String? = nil,
+        requestBodyTruncated: Bool? = nil,
+        responseBodyTruncated: Bool? = nil,
+        isStreamingResponse: Bool? = nil
     ) {
         self.id = id
         self.request = request
@@ -66,7 +75,13 @@ public struct Flow: Identifiable, Codable, Sendable {
         self.isPinned = isPinned
         self.colorTag = colorTag
         self.comment = comment
+        self.requestBodyTruncated = requestBodyTruncated
+        self.responseBodyTruncated = responseBodyTruncated
+        self.isStreamingResponse = isStreamingResponse
     }
+
+    public var isRequestBodyTruncated: Bool { requestBodyTruncated == true }
+    public var isResponseBodyTruncated: Bool { responseBodyTruncated == true }
 
     public var host: String { request.host }
     public var method: String { request.method }
@@ -74,6 +89,8 @@ public struct Flow: Identifiable, Codable, Sendable {
     public var path: String { request.path }
     public var statusCode: Int? { response?.statusCode }
     public var isPending: Bool { response == nil && error == nil }
+    /// True when the flow reached a terminal state (completion or error).
+    public var isCompleted: Bool { timing.end != nil || error != nil }
     /// True when this response came from a Map Local rule rather than the network.
     public var isMappedLocally: Bool { localMapSource != nil }
     public var state: FlowState {

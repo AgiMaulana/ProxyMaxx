@@ -139,6 +139,10 @@
 "inspector.contentType" = "Content-Type";
 "inspector.contentLength" = "Content-Length";
 "inspector.mappedFrom" = "Mapped from";
+"inspector.streaming" = "Streaming";
+"inspector.truncated" = "Truncated";
+"inspector.truncatedHelp" = "Payload was truncated to respect capture limits";
+"inspector.previewTruncated" = "Preview truncated at %@";
 
 /* MARK: Local Override */
 "mapLocal.enable" = "Enable Local Override";
