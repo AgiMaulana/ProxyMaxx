@@ -81,9 +81,6 @@ class ProxyMaxxVpnService : VpnService() {
      * then would return this tunnel's own — deliberately empty — DNS configuration.
      */
     private fun resolverAddresses(): List<InetAddress> {
-        // excludeRoute arrived in API 33. Below that the tunnel still works; name lookups
-        // simply take their chances with the underlying resolver, as they did before.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return emptyList()
         val manager = getSystemService(ConnectivityManager::class.java) ?: return emptyList()
         val network = manager.activeNetwork ?: return emptyList()
         return manager.getLinkProperties(network)?.dnsServers.orEmpty()
@@ -114,9 +111,15 @@ class ProxyMaxxVpnService : VpnService() {
                     // and without excluding them the lookup enters the tunnel, where the UDP
                     // relay cannot answer it. The result of getting this wrong is a device
                     // that reports no internet at all.
+                    //
+                    // excludeRoute arrived in API 33. Below that the tunnel still declares
+                    // the underlying resolvers; name lookups simply take their chances with
+                    // the underlying resolver, as they did before.
                     resolverAddresses().forEach { resolver ->
                         addDnsServer(resolver)
-                        excludeRoute(IpPrefix(resolver, if (resolver is Inet4Address) 32 else 128))
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            excludeRoute(IpPrefix(resolver, if (resolver is Inet4Address) 32 else 128))
+                        }
                     }
                 }
                 .setBlocking(true)
