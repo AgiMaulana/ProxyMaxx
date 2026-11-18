@@ -82,6 +82,17 @@ final class AppModel: ObservableObject {
     @Published var lastError: String?
     @Published var activityLog: [String] = []
 
+    /// Handoff buffer coalescing snapshots off the main actor before batch drain.
+    let ingestBuffer = FlowIngestBuffer()
+
+    /// Periodic drain task running every 100 ms on the main actor.
+    private var ingestDrainTask: Task<Void, Never>?
+
+    /// Lock protecting control events (state changes, diagnostics) from arbitrary threads.
+    private let controlLock = NSLock()
+    private var pendingDiagnostics: [String] = []
+    private var pendingStateChange: (running: Bool, port: Int)?
+
     // MARK: - Remote diagnostics
 
     /// Remote crash reporting. The concrete Sentry implementation lives behind this
@@ -590,21 +601,25 @@ final class AppModel: ObservableObject {
             engine.sslProxyingPolicy = ruleStore.effectivePolicy
             engine.mapLocalRules = ruleStore.effectiveMapLocalRules
             engine.onEvent = { [weak self] event in
-                // Only snapshots are counted: the backlog the UI cares about is flow
-                // traffic, and a state change or diagnostic is one cheap main-actor hop.
-                guard case .flow = event else {
-                    Task { @MainActor in self?.handle(event) }
-                    return
-                }
-                CaptureMetrics.shared.interval(CaptureSignposts.snapshotEnqueue) {
-                    CaptureMetrics.shared.recordSnapshotEnqueued()
-                    Task { @MainActor in self?.handle(event) }
+                guard let self else { return }
+                switch event {
+                case .flow(let flow):
+                    CaptureMetrics.shared.interval(CaptureSignposts.snapshotEnqueue) {
+                        CaptureMetrics.shared.recordSnapshotEnqueued()
+                        self.ingestBuffer.enqueue(flow)
+                    }
+                case .stateChanged(let running, let port):
+                    self.enqueueStateChange(running: running, port: port)
+                case .diagnostic(let message):
+                    self.enqueueDiagnostic(message)
                 }
             }
             // Fresh hand-off buffer before the first snapshot, so a reader never replays
             // a previous run's flows as if they were just captured.
             flowSpool.reset()
             sessionLog.reset()
+            ingestBuffer.clear()
+            startIngestDrainLoop()
             try engine.start()
             self.engine = engine
             self.port = engine.boundPort ?? port
@@ -635,6 +650,9 @@ final class AppModel: ObservableObject {
     func stop() {
         engine?.stop()
         engine = nil
+        stopIngestDrainLoop()
+        flushIngestBuffer()
+        flushDiagnostics()
         isRunning = false
         boundSocksPort = nil
         stopDeviceMonitor()
@@ -649,6 +667,7 @@ final class AppModel: ObservableObject {
     }
 
     func clearSession() {
+        ingestBuffer.clear()
         flowStore.clear()
     }
 
@@ -1455,9 +1474,25 @@ final class AppModel: ObservableObject {
 
     private func startFlowIngestIfAttached() {
         guard flowIngestTask == nil else { return }
-        flowIngestTask = Task { @MainActor [weak self] in
+        flowIngestTask = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
-                self?.ingestExternalFlows()
+                let pending = FlowSpool.pendingURLs()
+                if !pending.isEmpty {
+                    let urls = Array(pending.prefix(200))
+                    var decoded: [Flow] = []
+                    decoded.reserveCapacity(urls.count)
+                    CaptureMetrics.shared.interval(CaptureSignposts.ingestDrain) {
+                        for url in urls {
+                            if let flow = FlowSpool.read(url) {
+                                decoded.append(flow)
+                            }
+                            FlowSpool.remove(url)
+                        }
+                    }
+                    if !decoded.isEmpty {
+                        await self?.applyExternalFlows(decoded)
+                    }
+                }
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }
@@ -1468,28 +1503,9 @@ final class AppModel: ObservableObject {
         flowIngestTask = nil
     }
 
-    /// Drain the shared spool into the visible session. Snapshots arrive oldest first;
-    /// `upsert` replaces a flow in place by id, so the throttled interim snapshots and
-    /// the final completed one collapse onto the same row.
-    ///
-    /// Decoding is kept inside the drain interval and the upserts inside one upsert
-    /// interval, so a baseline trace shows how much of the main-actor pass is decoding
-    /// files and how much is touching the store.
-    private func ingestExternalFlows() {
-        let urls = FlowSpool.pendingURLs()
-        guard !urls.isEmpty else { return }
-
-        var decoded: [Flow] = []
-        CaptureMetrics.shared.interval(CaptureSignposts.ingestDrain) {
-            for url in urls {
-                if let flow = FlowSpool.read(url) {
-                    decoded.append(flow)
-                }
-                FlowSpool.remove(url)
-            }
-        }
+    @MainActor
+    private func applyExternalFlows(_ decoded: [Flow]) {
         guard !decoded.isEmpty else { return }
-
         CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
             for flow in decoded {
                 flowStore.upsert(flow)
@@ -1736,39 +1752,118 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Events
+    // MARK: - Ingestion & Control Events
 
-    private func handle(_ event: ProxyEvent) {
-        switch event {
-        case .flow(let flow):
+    private func enqueueStateChange(running: Bool, port: Int) {
+        controlLock.lock()
+        pendingStateChange = (running, port)
+        controlLock.unlock()
+        Task { @MainActor [weak self] in
+            self?.applyPendingStateChange()
+        }
+    }
+
+    private func applyPendingStateChange() {
+        controlLock.lock()
+        let state = pendingStateChange
+        pendingStateChange = nil
+        controlLock.unlock()
+        guard let state else { return }
+        if self.isRunning != state.running { self.isRunning = state.running }
+        if self.port != state.port { self.port = state.port }
+    }
+
+    private func enqueueDiagnostic(_ message: String) {
+        controlLock.lock()
+        if pendingDiagnostics.count < 500 {
+            pendingDiagnostics.append(message)
+        }
+        controlLock.unlock()
+    }
+
+    private func startIngestDrainLoop() {
+        guard ingestDrainTask == nil else { return }
+        ingestDrainTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self, !Task.isCancelled else { return }
+                self.drainIngestBuffer()
+                self.flushDiagnostics()
+            }
+        }
+    }
+
+    private func stopIngestDrainLoop() {
+        ingestDrainTask?.cancel()
+        ingestDrainTask = nil
+    }
+
+    private func drainIngestBuffer(maxBatch: Int = 500) {
+        let batch = ingestBuffer.drain(maxCount: maxBatch)
+        guard !batch.flows.isEmpty else { return }
+
+        for flow in batch.flows {
             let peer = flow.clientAddress.flatMap(Flow.remotePeer(of:))
             if flow.connectedDevice == nil, flow.clientApp == nil, let peer,
                let device = Self.matchDevice(peer) {
                 DeviceAttribution.record(device, for: flow.id)
             }
-            // The emulator's relay is a loopback peer with no device address to match, so the
-            // device is chosen before the flow is stored. Otherwise the relay becomes the
-            // flow's client and the sidebar lists it under `netsimd` instead of the device.
             if flow.connectedDevice == nil, let peer, Flow.isLoopback(peer),
                let device = Self.emulatorRelayDevice() {
                 DeviceAttribution.record(device, for: flow.id)
             }
-            CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
+        }
+
+        CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
+            for flow in batch.flows {
                 flowStore.upsert(flow)
             }
-            CaptureMetrics.shared.interval(CaptureSignposts.persistenceWrite) {
+        }
+
+        CaptureMetrics.shared.interval(CaptureSignposts.persistenceWrite) {
+            for flow in batch.flows {
                 flowSpool.write(flow)
                 sessionLog.append(flow)
             }
-            CaptureMetrics.shared.recordPersistenceWrites()
-            CaptureMetrics.shared.recordSnapshotHandled(flowCount: flowStore.flows.count)
-        case .stateChanged(let running, let port):
-            isRunning = running
-            self.port = port
-        case .diagnostic(let message):
-            // ProxyKit already writes these through swift-log, so only mirror the UI feed.
-            recordActivity(message)
         }
+
+        CaptureMetrics.shared.recordPersistenceWrites(batch.flows.count)
+        CaptureMetrics.shared.recordSnapshotHandled(count: batch.snapshotCount, flowCount: flowStore.flows.count)
+    }
+
+    private func flushIngestBuffer() {
+        while !ingestBuffer.isEmpty {
+            drainIngestBuffer(maxBatch: 500)
+        }
+    }
+
+    private func flushDiagnostics() {
+        controlLock.lock()
+        guard !pendingDiagnostics.isEmpty else {
+            controlLock.unlock()
+            return
+        }
+        let batch = pendingDiagnostics
+        pendingDiagnostics.removeAll(keepingCapacity: true)
+        controlLock.unlock()
+
+        let visibleBatch = batch.suffix(20)
+        let now = Self.timeFormatter.string(from: Date())
+        var newLines: [String] = []
+        newLines.reserveCapacity(visibleBatch.count)
+        for msg in visibleBatch {
+            newLines.append("[\(now)] \(msg)")
+        }
+        for msg in batch {
+            LogKit.record(msg, component: "Proxy")
+        }
+
+        var updated = activityLog
+        updated.append(contentsOf: newLines)
+        if updated.count > 500 {
+            updated.removeFirst(updated.count - 500)
+        }
+        activityLog = updated
     }
 
     /// Stop the reporter on a clean exit so the SDK can flush what it already has.
@@ -1802,10 +1897,12 @@ final class AppModel: ObservableObject {
 
     private func recordActivity(_ message: String) {
         let stamped = "[\(Self.timeFormatter.string(from: Date()))] \(message)"
-        activityLog.append(stamped)
-        if activityLog.count > 500 {
-            activityLog.removeFirst(activityLog.count - 500)
+        var updated = activityLog
+        updated.append(stamped)
+        if updated.count > 500 {
+            updated.removeFirst(updated.count - 500)
         }
+        activityLog = updated
     }
 
     private static let timeFormatter: DateFormatter = {

@@ -91,11 +91,12 @@ public final class CaptureMetrics: @unchecked Sendable {
         counters.pendingSnapshots += 1
     }
 
-    /// One enqueued snapshot was upserted and persisted by the main actor.
-    public func recordSnapshotHandled(flowCount: Int) {
+    /// One or more enqueued snapshots were upserted and persisted by the main actor.
+    public func recordSnapshotHandled(count: Int = 1, flowCount: Int) {
+        guard count > 0 else { return }
         lock.lock(); defer { lock.unlock() }
-        counters.snapshotsIngested &+= 1
-        if counters.pendingSnapshots > 0 { counters.pendingSnapshots -= 1 }
+        counters.snapshotsIngested &+= UInt64(count)
+        counters.pendingSnapshots = max(0, counters.pendingSnapshots - count)
         counters.flowCount = flowCount
     }
 
