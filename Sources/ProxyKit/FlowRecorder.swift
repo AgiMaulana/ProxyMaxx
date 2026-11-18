@@ -51,6 +51,7 @@ final class FlowRecorder: @unchecked Sendable {
     private func mutate(forceEmit: Bool = true, _ body: (inout Flow) -> Void) {
         lock.lock()
         body(&flow)
+        flow.revision = (flow.revision ?? 0) &+ 1
         let snapshot = flow
         lock.unlock()
         if forceEmit {

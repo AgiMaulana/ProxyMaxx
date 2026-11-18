@@ -10,6 +10,7 @@ struct MainView: View {
     @ObservedObject var flowStore: FlowStore
     /// Observed so pinning or saving an entry redraws the sidebar and its collection rows.
     @ObservedObject var marks: SidebarMarks
+    @StateObject private var coordinator: TrafficListCoordinator
     @State private var filter = FlowFilter()
     /// Which Collections row is open and which entry is drilled into within it. The two are
     /// kept apart so a click on an entry keeps its collection open rather than falling back
@@ -21,12 +22,24 @@ struct MainView: View {
     /// Set when capture emptied the table and left a device selection whose emulator stopped.
     @State private var deviceGone = false
 
+    init(flowStore: FlowStore, marks: SidebarMarks) {
+        self.flowStore = flowStore
+        self.marks = marks
+        _coordinator = StateObject(wrappedValue: TrafficListCoordinator(
+            initialSnapshot: TrafficListSnapshot.compute(
+                flows: flowStore.flows,
+                filter: FlowFilter(),
+                navigation: SidebarNavigation(),
+                pinned: marks.pinned,
+                saved: marks.saved,
+                deviceSerials: []
+            )
+        ))
+    }
+
     var body: some View {
-        // Derived once per pass, and measured as one interval: this is the work a snapshot
-        // burst repeats, so the baseline trace has to show it beside the ingest stages.
-        let derived = derivedLists()
-        let flows = derived.flows
-        let summary = derived.summary
+        let flows = coordinator.snapshot.flows
+        let summary = coordinator.snapshot.summary
         let selectedFlow = flows.first { $0.id == selection }
         return VStack(spacing: 0) {
             controlBar(flows: flows)
@@ -90,19 +103,27 @@ struct MainView: View {
             Text(model.lastError ?? "")
         }
         .onReceive(flowStore.$revision) { _ in
-            guard flowStore.flows.isEmpty else { return }
-            selection = nil
-            switch navigation.scope {
-            case .client, .app: navigation.clearScope()
-            case .device(let serial) where !model.connectedDevices.contains(where: { $0.serial == serial }):
-                // The chosen emulator stopped: say so next to the empty table rather than
-                // silently widening the list back to every device's traffic.
-                navigation.clearScope()
-                deviceGone = true
-            default: break
+            if flowStore.flows.isEmpty {
+                selection = nil
+                switch navigation.scope {
+                case .client, .app: navigation.clearScope()
+                case .device(let serial) where !model.connectedDevices.contains(where: { $0.serial == serial }):
+                    // The chosen emulator stopped: say so next to the empty table rather than
+                    // silently widening the list back to every device's traffic.
+                    navigation.clearScope()
+                    deviceGone = true
+                default: break
+                }
             }
+            updateSnapshot()
         }
+        .onChange(of: filter) { _, _ in updateSnapshot() }
+        .onChange(of: navigation) { _, _ in updateSnapshot() }
+        .onReceive(marks.$pinned) { _ in updateSnapshot() }
+        .onReceive(marks.$saved) { _ in updateSnapshot() }
+        .onReceive(model.$connectedDevices) { _ in updateSnapshot() }
         .onAppear {
+            updateSnapshot()
             model.refreshExternalOwner()
             model.refreshSystemProxyState()
             model.detectStaleSystemProxy()
@@ -113,30 +134,16 @@ struct MainView: View {
         }
     }
 
-    /// The filtered rows and the sidebar summary in one measured pass, so the signpost
-    /// covers both derivations and a redraw cannot report only half its cost.
-    private func derivedLists() -> (flows: [Flow], summary: FlowSummary) {
-        CaptureMetrics.shared.interval(CaptureSignposts.listDerive) {
-            CaptureMetrics.shared.recordListDerivation()
-            return (scopedFlows(), FlowSummary(flowStore.flows))
-        }
-    }
-
-    /// The rows the traffic table shows: the text/method/error filter, the collection scope,
-    /// and the device/app/host drilled into within that collection.
-    ///
-    /// `.pinned` and `.saved` are not flow predicates in `FlowFilter` — they narrow the list
-    /// to the flows owned by the entries those collections list — so the collection is
-    /// applied here, on top of the ordinary filter.
-    private func scopedFlows() -> [Flow] {
-        var effective = filter
-        effective.sidebarSelection = navigation.flowScope
-        let base = effective.apply(to: flowStore.flows)
-        switch navigation.collection {
-        case .pinned: return base.filter { marks.isPinned($0) }
-        case .saved: return base.filter { marks.isSaved($0) }
-        default: return base
-        }
+    private func updateSnapshot() {
+        coordinator.updateIfNeeded(
+            flows: flowStore.flows,
+            revision: flowStore.revision,
+            filter: filter,
+            navigation: navigation,
+            pinned: marks.pinned,
+            saved: marks.saved,
+            deviceSerials: model.connectedDevices.map(\.serial)
+        )
     }
 
     private func sidebarView(summary: FlowSummary) -> some View {
@@ -164,13 +171,12 @@ struct MainView: View {
     @ViewBuilder
     private func allSections(summary: FlowSummary) -> some View {
         if !model.connectedDevices.isEmpty {
-            let counts = DeviceFlowCounts(flowStore.flows)
             Section(header: Text(L10n.format("main.devices", model.connectedDevices.count))) {
                 ForEach(model.connectedDevices) { device in
                     entityRow(
                         entity: .device(serial: device.serial, label: L10n.string(device.displayName)),
                         selection: .device(device.serial),
-                        count: counts.count(for: device.serial)
+                        count: coordinator.snapshot.count(for: device.serial)
                     ) {
                         Label {
                             Text(L10n.string(device.displayName)).lineLimit(1)
@@ -256,7 +262,7 @@ struct MainView: View {
     /// A row for a mark that is not sourced from the live summary, so a pinned or saved entry
     /// whose device stopped, or which has no traffic this session, still lists.
     private func markRow(_ entity: SidebarEntity) -> some View {
-        entityRow(entity: entity, selection: selection(for: entity), count: flowCount(for: entity)) {
+        entityRow(entity: entity, selection: selection(for: entity), count: coordinator.snapshot.count(for: entity)) {
             Label(entity.label, systemImage: icon(for: entity))
         }
     }
@@ -277,10 +283,6 @@ struct MainView: View {
         case .app: return "app"
         case .domain: return "globe"
         }
-    }
-
-    private func flowCount(for entity: SidebarEntity) -> Int {
-        flowStore.flows.lazy.filter { entity.matches($0) }.count
     }
 
     /// Selection for the sidebar list, which shows two kinds of tagged row: a Collections
@@ -347,68 +349,6 @@ struct MainView: View {
             .font(.caption)
             .monospacedDigit()
             .accessibilityLabel(Text(L10n.format("main.flowCount", count)))
-    }
-
-    private struct AppSummary: Identifiable {
-        let id: String
-        var app: ClientApp
-        var count = 0
-    }
-
-    /// Counts all captured flows in one pass, independent of active filters.
-    private struct FlowSummary {
-        let total: Int
-        let apps: [AppSummary]
-        let duplicateAppNames: Set<String>
-        let domains: [String]
-        private let domainCounts: [String: Int]
-
-        init(_ flows: [Flow]) {
-            var apps: [String: AppSummary] = [:]
-            var domainCounts: [String: Int] = [:]
-            for flow in flows {
-                // A flow already credited to a device is not also counted under the process
-                // that relayed it: the emulator's `netsimd` would otherwise list the device's
-                // traffic twice, once as the device and once as the relay.
-                if let app = flow.clientApp, flow.connectedDevice == nil {
-                    let id = app.id
-                    apps[id, default: AppSummary(id: id, app: app)].count += 1
-                    if apps[id]?.app.path == nil, app.path != nil {
-                        apps[id]?.app = app
-                    }
-                }
-                domainCounts[flow.host, default: 0] += 1
-            }
-            var names: Set<String> = []
-            var duplicateNames: Set<String> = []
-            for entry in apps.values where !names.insert(entry.app.name).inserted {
-                duplicateNames.insert(entry.app.name)
-            }
-            self.total = flows.count
-            self.apps = apps.values.sorted {
-                let order = $0.app.name.localizedStandardCompare($1.app.name)
-                return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
-            }
-            self.duplicateAppNames = duplicateNames
-            self.domainCounts = domainCounts
-            self.domains = domainCounts.keys.sorted()
-        }
-
-        func domainCount(_ domain: String) -> Int { domainCounts[domain] ?? 0 }
-    }
-
-    /// Flows per connected device, counted in one pass like `FlowSummary`.
-    private struct DeviceFlowCounts {
-        private var counts: [String: Int] = [:]
-
-        init(_ flows: [Flow]) {
-            for flow in flows {
-                guard let serial = flow.connectedDevice?.serial else { continue }
-                counts[serial, default: 0] += 1
-            }
-        }
-
-        func count(for serial: String) -> Int { counts[serial] ?? 0 }
     }
 
     private var errorBinding: Binding<Bool> {

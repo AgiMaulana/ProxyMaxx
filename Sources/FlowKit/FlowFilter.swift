@@ -32,7 +32,7 @@ public enum SidebarSelection: Hashable, Equatable, Sendable, Codable {
 /// click on a pinned or saved entry overwrote the collection that held it, dropping the
 /// list back to All. `scope` is `nil` when no entry is drilled into, so the collection
 /// alone decides what the table shows.
-public struct SidebarNavigation: Equatable, Sendable {
+public struct SidebarNavigation: Equatable, Sendable, Hashable {
     public var collection: SidebarSelection
     public var scope: SidebarSelection?
 
@@ -74,7 +74,7 @@ public struct SidebarNavigation: Equatable, Sendable {
 }
 
 /// Text, method, error and sidebar filtering applied to the captured flow list.
-public struct FlowFilter: Equatable, Sendable, Codable {
+public struct FlowFilter: Equatable, Sendable, Codable, Hashable {
     public var text: String = ""
     public var method: String = "All"
     public var onlyErrors: Bool = false
@@ -125,11 +125,11 @@ public struct FlowFilter: Equatable, Sendable, Codable {
         }
 
         guard !text.isEmpty else { return true }
-        let needle = text.lowercased()
-        return flow.url.lowercased().contains(needle)
-            || flow.host.lowercased().contains(needle)
-            || flow.method.lowercased().contains(needle)
-            || (flow.statusCode.map(String.init)?.contains(needle) ?? false)
+        if flow.url.range(of: text, options: .caseInsensitive) != nil { return true }
+        if flow.host.range(of: text, options: .caseInsensitive) != nil { return true }
+        if flow.method.range(of: text, options: .caseInsensitive) != nil { return true }
+        if let status = flow.statusCode, String(status).range(of: text, options: .caseInsensitive) != nil { return true }
+        return false
     }
 
     public func apply(to flows: [Flow]) -> [Flow] {
