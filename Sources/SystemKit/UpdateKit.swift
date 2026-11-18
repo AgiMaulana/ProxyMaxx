@@ -122,6 +122,170 @@ public enum InstalledVersion {
         guard bundle.bundleIdentifier != nil else { return nil }
         return version(bundle: bundle)
     }
+
+    /// Locates the application bundle for ProxyMaxx.
+    ///
+    /// Checks:
+    /// 1. The explicitly provided bundle or `Bundle.main` if it has the ProxyMaxx bundle ID or short version string.
+    /// 2. The directory hierarchy enclosing the executable (e.g. `ProxyMaxx.app/Contents/Resources/proxymaxx-cli`).
+    /// 3. The standard installation directory `/Applications/ProxyMaxx.app`.
+    /// 4. Homebrew Caskroom locations (`/opt/homebrew/Caskroom/proxymaxx/...`, `/usr/local/Caskroom/proxymaxx/...`).
+    public static func resolveAppBundle(
+        startingBundle: Bundle? = nil,
+        executableURL: URL? = nil,
+        applicationsDirectory: String = InstallOriginDetector.applicationsDirectory,
+        caskroomDirectories: [URL]? = nil,
+        fileManager: FileManager = .default
+    ) -> Bundle? {
+        if let starting = startingBundle,
+           starting.bundleIdentifier == Brand.bundleIdentifier || starting.infoDictionary?["CFBundleShortVersionString"] != nil {
+            return starting
+        }
+        if Bundle.main.bundleIdentifier == Brand.bundleIdentifier,
+           Bundle.main.infoDictionary?["CFBundleShortVersionString"] != nil {
+            return Bundle.main
+        }
+
+        let exec = (executableURL ?? Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
+        var current = exec.deletingLastPathComponent()
+        while current.path != "/" && current.pathComponents.count > 1 {
+            if current.pathExtension == "app" {
+                if let bundle = Bundle(url: current),
+                   bundle.bundleIdentifier == Brand.bundleIdentifier || bundle.infoDictionary?["CFBundleShortVersionString"] != nil {
+                    return bundle
+                }
+            }
+            current = current.deletingLastPathComponent()
+        }
+
+        let appURL = URL(fileURLWithPath: applicationsDirectory).appendingPathComponent(InstallOriginDetector.appBundleName)
+        if fileManager.fileExists(atPath: appURL.path),
+           let bundle = Bundle(url: appURL),
+           bundle.bundleIdentifier == Brand.bundleIdentifier || bundle.infoDictionary?["CFBundleShortVersionString"] != nil {
+            return bundle
+        }
+
+        let caskrooms = caskroomDirectories ?? InstallOriginDetector.caskroomDirectories
+        for caskroom in caskrooms {
+            let base = caskroom.appendingPathComponent(InstallOriginDetector.caskToken, isDirectory: true)
+            guard let versions = try? fileManager.contentsOfDirectory(
+                at: base,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for version in versions {
+                let candidate = version.appendingPathComponent(InstallOriginDetector.appBundleName)
+                if fileManager.fileExists(atPath: candidate.path),
+                   let bundle = Bundle(url: candidate),
+                   bundle.bundleIdentifier == Brand.bundleIdentifier || bundle.infoDictionary?["CFBundleShortVersionString"] != nil {
+                    return bundle
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Resolves detailed version and origin information for this ProxyMaxx binary or installation.
+    public static func info(
+        bundle: Bundle? = nil,
+        executableURL: URL? = nil,
+        applicationsDirectory: String = InstallOriginDetector.applicationsDirectory,
+        caskroomDirectories: [URL]? = nil,
+        fileManager: FileManager = .default
+    ) -> InstalledVersionInfo {
+        if let appBundle = resolveAppBundle(
+            startingBundle: bundle,
+            executableURL: executableURL,
+            applicationsDirectory: applicationsDirectory,
+            caskroomDirectories: caskroomDirectories,
+            fileManager: fileManager
+        ) {
+            let short = (appBundle.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+            let build = appBundle.infoDictionary?["CFBundleVersion"] as? String
+            let release = ReleaseVersion(short)
+            let origin = InstallOriginDetector.origin(
+                bundleURL: appBundle.bundleURL,
+                applicationsDirectory: applicationsDirectory,
+                caskroomDirectories: caskroomDirectories,
+                fileManager: fileManager
+            )
+            return InstalledVersionInfo(
+                version: short.isEmpty ? "unknown" : short,
+                build: build,
+                releaseVersion: release,
+                bundleURL: appBundle.bundleURL,
+                isBundled: true,
+                origin: origin
+            )
+        }
+
+        // If run within a development checkout with Scripts/Info.plist
+        let plistURL = CLICompanion.packageRoot.appendingPathComponent("Scripts/Info.plist")
+        if fileManager.fileExists(atPath: plistURL.path),
+           let data = try? Data(contentsOf: plistURL),
+           let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+           let short = plist["CFBundleShortVersionString"] as? String {
+            let build = plist["CFBundleVersion"] as? String
+            return InstalledVersionInfo(
+                version: short,
+                build: build,
+                releaseVersion: ReleaseVersion(short),
+                bundleURL: nil,
+                isBundled: false,
+                origin: .development
+            )
+        }
+
+        return InstalledVersionInfo(
+            version: "dev",
+            build: nil,
+            releaseVersion: nil,
+            bundleURL: nil,
+            isBundled: false,
+            origin: .development
+        )
+    }
+}
+
+/// Descriptive facts about the version and origin of this installed copy of ProxyMaxx.
+public struct InstalledVersionInfo: Equatable, Sendable {
+    public let version: String
+    public let build: String?
+    public let releaseVersion: ReleaseVersion?
+    public let bundleURL: URL?
+    public let isBundled: Bool
+    public let origin: InstallOrigin?
+
+    public init(
+        version: String,
+        build: String? = nil,
+        releaseVersion: ReleaseVersion? = nil,
+        bundleURL: URL? = nil,
+        isBundled: Bool = false,
+        origin: InstallOrigin? = nil
+    ) {
+        self.version = version
+        self.build = build
+        self.releaseVersion = releaseVersion
+        self.bundleURL = bundleURL
+        self.isBundled = isBundled
+        self.origin = origin
+    }
+
+    public var displayString: String {
+        if isBundled {
+            if let build, !build.isEmpty {
+                return "\(Brand.displayName) \(version) (build \(build))"
+            }
+            return "\(Brand.displayName) \(version)"
+        } else {
+            if version != "dev" && !version.isEmpty {
+                return "\(Brand.displayName) \(version) (unbundled)"
+            }
+            return "\(Brand.displayName) (unbundled)"
+        }
+    }
 }
 
 // MARK: - How this copy was installed

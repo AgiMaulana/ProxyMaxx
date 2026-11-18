@@ -48,8 +48,8 @@ struct Arguments {
 
     private static let booleanOptions: Set<String> = [
         "activate", "detach", "dry-run", "errors-only", "fail-on-match", "follow", "force",
-        "h", "help", "host-only", "include-non-success", "include-physical", "magisk", "no-magisk",
-        "open", "pem", "pinned", "print", "remove", "saved", "text",
+        "h", "help", "host-only", "include-non-success", "include-physical", "json", "magisk", "no-magisk",
+        "open", "pem", "pinned", "print", "remove", "saved", "short", "text", "v", "version",
     ]
 
     /// The option name behind a token, or nil when the token is a positional value.
@@ -118,6 +118,10 @@ enum Help {
                            shape `serve` streams; --text prints one line per flow.
                            --fail-on-match exits 4 after printing when any flow matched.
       proxymaxx-cli status                 Print owner/pid/ports of the running proxy.
+      proxymaxx-cli version [--short] [--json]
+                           Print the installed version of ProxyMaxx. --short prints
+                           the version number only; --json prints a JSON object with
+                           bundle and install details. -v and --version also work.
       proxymaxx-cli report [--open | --print]
                            Print the tail of the newest local log (Logs/0.log). --open
                            opens a prefilled GitHub new-issue page carrying it; --print

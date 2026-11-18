@@ -91,6 +91,7 @@ proxymaxx-cli flows  [--filter TEXT] [--method M] [--errors-only] [--host H] [--
                      [--flow-mode summary|full] [--out PATH] [--follow] [--text]
                      [--fail-on-match]
 proxymaxx-cli status
+proxymaxx-cli version [--short] [--json]
 proxymaxx-cli proxy on | off | status
 proxymaxx-cli proxy-host
 proxymaxx-cli maplocal on | off
