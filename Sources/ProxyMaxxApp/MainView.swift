@@ -22,10 +22,11 @@ struct MainView: View {
     @State private var deviceGone = false
 
     var body: some View {
-        // Derived once per pass. `flows` was a computed property read five times, each
-        // read re-filtering the whole store.
-        let flows = scopedFlows()
-        let summary = FlowSummary(flowStore.flows)
+        // Derived once per pass, and measured as one interval: this is the work a snapshot
+        // burst repeats, so the baseline trace has to show it beside the ingest stages.
+        let derived = derivedLists()
+        let flows = derived.flows
+        let summary = derived.summary
         let selectedFlow = flows.first { $0.id == selection }
         return VStack(spacing: 0) {
             controlBar(flows: flows)
@@ -109,6 +110,15 @@ struct MainView: View {
             model.beginExternalOwnerWatch()
             model.presentErrorReportingPromptIfNeeded()
             model.checkForUpdatesIfNeeded()
+        }
+    }
+
+    /// The filtered rows and the sidebar summary in one measured pass, so the signpost
+    /// covers both derivations and a redraw cannot report only half its cost.
+    private func derivedLists() -> (flows: [Flow], summary: FlowSummary) {
+        CaptureMetrics.shared.interval(CaptureSignposts.listDerive) {
+            CaptureMetrics.shared.recordListDerivation()
+            return (scopedFlows(), FlowSummary(flowStore.flows))
         }
     }
 
