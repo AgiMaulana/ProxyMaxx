@@ -1505,9 +1505,7 @@ final class AppModel: ObservableObject {
     private func applyExternalFlows(_ decoded: [Flow]) {
         guard !decoded.isEmpty else { return }
         CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
-            for flow in decoded {
-                flowStore.upsert(flow)
-            }
+            flowStore.upsert(decoded)
         }
         CaptureMetrics.shared.recordIngestDrain(snapshots: decoded.count, flowCount: flowStore.flows.count)
     }
@@ -1813,9 +1811,7 @@ final class AppModel: ObservableObject {
         }
 
         CaptureMetrics.shared.interval(CaptureSignposts.ingestUpsert) {
-            for flow in batch.flows {
-                flowStore.upsert(flow)
-            }
+            flowStore.upsert(batch.flows)
         }
 
         Task {
