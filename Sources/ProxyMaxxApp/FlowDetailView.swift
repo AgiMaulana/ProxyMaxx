@@ -32,6 +32,9 @@ private enum BodyMode: CaseIterable {
 
 /// Request/response inspector for a single captured flow.
 struct FlowDetailView: View {
+    static let maxFormattedPreviewBytes = 2 * 1024 * 1024 // 2 MiB
+    static let maxHexPreviewBytes = 256 * 1024 // 256 KiB
+
     @EnvironmentObject var model: AppModel
     let flow: Flow
     @State private var side: Side = .response
@@ -106,6 +109,11 @@ struct FlowDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.blue)
                         .help(flow.localMapSource ?? "")
+                }
+                if flow.isStreamingResponse == true {
+                    Label("inspector.streaming", systemImage: "dot.radiowaves.left.and.right")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
                 Spacer()
                 exportMenu
@@ -209,7 +217,7 @@ struct FlowDetailView: View {
                 ("common.version", flow.request.httpVersion),
             ])
             headersSection("inspector.requestHeaders", flow.request.headers)
-            bodySection("inspector.requestBody", data: flow.request.body, contentType: flow.request.contentType, encoding: flow.request.contentEncoding)
+            bodySection("inspector.requestBody", data: flow.request.body, contentType: flow.request.contentType, encoding: flow.request.contentEncoding, isTruncated: flow.isRequestBodyTruncated)
         }
     }
 
@@ -230,7 +238,14 @@ struct FlowDetailView: View {
                     keyValueTable([("inspector.mappedFrom", source)])
                 }
                 headersSection("inspector.responseHeaders", response.headers)
-                bodySection("inspector.responseBody", data: response.body, contentType: response.contentType, encoding: response.contentEncoding)
+                bodySection(
+                    "inspector.responseBody",
+                    data: response.body,
+                    contentType: response.contentType,
+                    encoding: response.contentEncoding,
+                    isTruncated: flow.isResponseBodyTruncated,
+                    isStreaming: flow.isStreamingResponse == true
+                )
                 if let messages = flow.webSocketMessages, !messages.isEmpty {
                     webSocketSection(messages)
                 }
@@ -335,7 +350,14 @@ struct FlowDetailView: View {
     }
 
     @ViewBuilder
-    private func bodySection(_ title: LocalizedStringKey, data: Data, contentType: MIMEType?, encoding: String? = nil) -> some View {
+    private func bodySection(
+        _ title: LocalizedStringKey,
+        data: Data,
+        contentType: MIMEType?,
+        encoding: String? = nil,
+        isTruncated: Bool = false,
+        isStreaming: Bool = false
+    ) -> some View {
         // Decode once, here, so every mode below (preview, pretty, raw, hex) sees the
         // payload the server actually produced rather than its compressed form.
         let decoded = ContentDecoding.decode(data, encoding: encoding)
@@ -344,6 +366,15 @@ struct FlowDetailView: View {
             HStack {
                 sectionTitle(title)
                 Spacer()
+                if isStreaming {
+                    Label("inspector.streaming", systemImage: "dot.radiowaves.left.and.right")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if isTruncated {
+                    Label("inspector.truncated", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                        .help("inspector.truncatedHelp")
+                }
                 if decoded != nil, let encoding {
                     Text(L10n.format("inspector.decoded", encoding))
                         .font(.caption).foregroundStyle(.secondary)
@@ -378,6 +409,18 @@ private struct BodyPayloadView: View, Equatable {
         lhs.data == rhs.data && lhs.contentType == rhs.contentType && lhs.mode == rhs.mode
     }
 
+    private var previewLimit: Int {
+        mode == .hex ? FlowDetailView.maxHexPreviewBytes : FlowDetailView.maxFormattedPreviewBytes
+    }
+
+    private var isPreviewTruncated: Bool {
+        data.count > previewLimit
+    }
+
+    private var previewData: Data {
+        isPreviewTruncated ? data.prefix(previewLimit) : data
+    }
+
     var body: some View {
         if data.isEmpty {
             Text("common.empty").font(.caption).foregroundStyle(.tertiary)
@@ -388,13 +431,23 @@ private struct BodyPayloadView: View, Equatable {
                 .frame(maxHeight: 260)
                 .background(Color.black.opacity(0.05))
         } else {
-            Text(renderedBody)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 4) {
+                if isPreviewTruncated {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle")
+                        Text(L10n.format("inspector.previewTruncated", BodyFormatting.byteCount(previewLimit)))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Text(renderedBody)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
         }
     }
 
@@ -404,22 +457,23 @@ private struct BodyPayloadView: View, Equatable {
     }
 
     private var renderedBody: String {
+        let activeData = previewData
         switch mode {
         case .hex:
-            return BodyFormatting.hexDump(data)
+            return BodyFormatting.hexDump(activeData)
         case .raw:
-            return BodyFormatting.text(from: data, contentType: contentType) ?? ""
+            return BodyFormatting.text(from: activeData, contentType: contentType) ?? ""
         case .pretty:
-            if contentType?.isJSON == true || BodyFormatting.isValidJSON(data) {
-                return BodyFormatting.prettyJSON(data) ?? (BodyFormatting.text(from: data, contentType: contentType) ?? "")
+            if contentType?.isJSON == true || BodyFormatting.isValidJSON(activeData) {
+                return BodyFormatting.prettyJSON(activeData) ?? (BodyFormatting.text(from: activeData, contentType: contentType) ?? "")
             }
             if contentType?.isForm == true {
-                let pairs = BodyFormatting.formPairs(data)
+                let pairs = BodyFormatting.formPairs(activeData)
                 if !pairs.isEmpty {
                     return pairs.map { "\($0.name) = \($0.value)" }.joined(separator: "\n")
                 }
             }
-            return BodyFormatting.text(from: data, contentType: contentType) ?? BodyFormatting.hexDump(data)
+            return BodyFormatting.text(from: activeData, contentType: contentType) ?? BodyFormatting.hexDump(activeData)
         }
     }
 }
