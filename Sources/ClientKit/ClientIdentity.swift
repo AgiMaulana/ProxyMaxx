@@ -41,6 +41,7 @@ enum ClientIdentity {
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let written = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         guard written > 0 else { return nil }
+        buffer[min(Int(written), buffer.count - 1)] = 0
         return String(cString: buffer)
     }
 
@@ -48,6 +49,7 @@ enum ClientIdentity {
         var buffer = [CChar](repeating: 0, count: 1024)
         let written = proc_name(pid, &buffer, UInt32(buffer.count))
         guard written > 0 else { return nil }
+        buffer[min(Int(written), buffer.count - 1)] = 0
         let name = String(cString: buffer)
         return name.isEmpty ? nil : name
     }

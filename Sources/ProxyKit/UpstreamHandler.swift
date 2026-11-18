@@ -10,7 +10,9 @@ final class UpstreamHandler: ChannelInboundHandler, RemovableChannelHandler {
 
     private let clientChannel: Channel
     private let recorder: FlowRecorder
-    private let engine: ProxyEngine
+    /// Weak: the channel holds the pipeline and the pipeline holds this handler; holding the
+    /// engine strongly would prevent deinit while any upstream connection is open or idle.
+    private weak var engine: ProxyEngine?
     private let clientKeepAlive: Bool
     private let host: String
     private var finished = false
@@ -55,7 +57,7 @@ final class UpstreamHandler: ChannelInboundHandler, RemovableChannelHandler {
             clientChannel.writeAndFlush(NIOAny(HTTPServerResponsePart.end(trailers))).whenComplete { result in
                 switch result {
                 case .success where switchingProtocols:
-                    self.engine.beginWebSocketRelay(
+                    self.engine?.beginWebSocketRelay(
                         client: self.clientChannel,
                         upstream: upstreamChannel,
                         recorder: self.recorder,
@@ -77,7 +79,7 @@ final class UpstreamHandler: ChannelInboundHandler, RemovableChannelHandler {
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         guard !finished else { return }
         finished = true
-        engine.emit(.diagnostic("upstream error: \(error)"))
+        engine?.emit(.diagnostic("upstream error: \(error)"))
         recorder.fail("\(error)")
         clientChannel.close(promise: nil)
         context.close(promise: nil)

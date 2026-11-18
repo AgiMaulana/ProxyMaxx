@@ -8,6 +8,8 @@ import FlowKit
 public final class ClientAppResolver: ClientAppResolving, @unchecked Sendable {
     private let queue = DispatchQueue(label: "oss.proxymaxx.clientkit.resolver", qos: .utility, attributes: .concurrent)
     private let probe: any SocketOwnershipProbing
+    /// Limit concurrent process-table scans to 4 to prevent GCD worker thread stack exhaustion under heavy connection bursts.
+    private let probeSemaphore = DispatchSemaphore(value: 4)
 
     public convenience init() {
         self.init(probe: ClientSocketScanner())
@@ -25,6 +27,8 @@ public final class ClientAppResolver: ClientAppResolving, @unchecked Sendable {
         completion: @escaping @Sendable (ClientApp?) -> Void
     ) {
         queue.async { [self] in
+            probeSemaphore.wait()
+            defer { probeSemaphore.signal() }
             guard let pid = probe.pid(
                 clientAddress: clientAddress, clientPort: clientPort,
                 proxyAddress: proxyAddress, proxyPort: proxyPort

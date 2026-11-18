@@ -30,13 +30,16 @@ final class ClientSocketScanner: SocketOwnershipProbing, Sendable {
         return owner
     }
 
+    private static let maxPids = 65_536
+    private static let maxDescriptors = 65_536
+
     private static func listPIDs(into pids: inout [Int32]) -> Int {
         while true {
             let written = pids.withUnsafeMutableBytes {
                 Int(proc_listallpids($0.baseAddress, Int32($0.count)))
             }
             guard written > 0 else { return 0 }
-            if written < pids.count { return written }
+            if written < pids.count || pids.count >= maxPids { return min(written, pids.count) }
             pids.append(contentsOf: repeatElement(0, count: pids.count))
         }
     }
@@ -48,7 +51,9 @@ final class ClientSocketScanner: SocketOwnershipProbing, Sendable {
             }
             guard written > 0 else { return 0 }
             let count = written / MemoryLayout<proc_fdinfo>.stride
-            if count < descriptors.count { return count }
+            if count < descriptors.count || descriptors.count >= maxDescriptors {
+                return min(count, descriptors.count)
+            }
             descriptors.append(contentsOf: repeatElement(proc_fdinfo(), count: descriptors.count))
         }
     }
