@@ -24,7 +24,7 @@ public enum SessionLog {
     }
 
     /// Writer side: the process that hosts the engine.
-    public final class Writer {
+    public final class Writer: @unchecked Sendable {
         public let url: URL
         /// Soft cap on retained lines. When exceeded the log is compacted down to its
         /// newest half in one atomic rewrite, so a long session cannot fill the disk.
