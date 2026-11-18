@@ -26,7 +26,7 @@ public enum CLICompanion {
         return bundled
     }
 
-    private static var packageRoot: URL {
+    public static var packageRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()

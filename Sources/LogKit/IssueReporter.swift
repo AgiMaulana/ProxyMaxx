@@ -84,7 +84,7 @@ public enum IssueReporter {
     /// `ProxyMaxx 1.2.3 (build 45)` when bundled, falling back to the display name
     /// alone for the unbundled CLI binary.
     static var versionText: String {
-        let info = Bundle.main.infoDictionary
+        let info = resolvedInfoDictionary
         let short = info?["CFBundleShortVersionString"] as? String
         let build = info?["CFBundleVersion"] as? String
         switch (short, build) {
@@ -92,6 +92,24 @@ public enum IssueReporter {
         case let (short?, nil): return "\(Brand.displayName) \(short)"
         default: return "\(Brand.displayName) (unbundled)"
         }
+    }
+
+    private static var resolvedInfoDictionary: [String: Any]? {
+        if let info = Bundle.main.infoDictionary, info["CFBundleShortVersionString"] != nil {
+            return info
+        }
+        let exec = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
+        var current = exec.deletingLastPathComponent()
+        while current.path != "/" && current.pathComponents.count > 1 {
+            if current.pathExtension == "app" {
+                if let bundle = Bundle(url: current),
+                   bundle.bundleIdentifier == Brand.bundleIdentifier || bundle.infoDictionary?["CFBundleShortVersionString"] != nil {
+                    return bundle.infoDictionary
+                }
+            }
+            current = current.deletingLastPathComponent()
+        }
+        return Bundle.main.infoDictionary
     }
 
     /// A one-line hint of what the newest log entry was, for the issue title.

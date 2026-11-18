@@ -18,6 +18,10 @@ struct ProxyMaxxCLI {
             print(Help.text)
             exit(ExitCode.success)
         }
+        if arguments.has("v") || arguments.has("version") {
+            VersionCommand.run(arguments)
+            exit(ExitCode.success)
+        }
         guard let command = arguments.positional.first else {
             print(Help.text)
             exit(ExitCode.usage)
@@ -25,6 +29,8 @@ struct ProxyMaxxCLI {
 
         do {
             switch command {
+            case "version":
+                VersionCommand.run(arguments.after(command))
             case "serve":
                 try await ServeCommand.run(arguments.after(command))
             case "stop":
