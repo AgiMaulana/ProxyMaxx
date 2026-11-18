@@ -7,6 +7,10 @@ import SystemKit
 import ClientKit
 
 enum ServeCommand {
+    /// Maximum number of queued events held in the stream buffer.
+    /// Bounds CLI memory under heavy streaming traffic (e.g. CCTV / MJPEG).
+    public static let streamCapacity = 1_000
+
     /// Events the CLI main loop reacts to: the proxy's own event, or a stop signal.
     enum CLIEvent: Sendable {
         case proxy(ProxyEvent)
@@ -68,22 +72,31 @@ enum ServeCommand {
 
         // The protocol with the rest of the program: funnel proxy callbacks (arbitrary
         // threads) and terminal signals into one ordered stream the main loop awaits.
-        let events = AsyncStream<CLIEvent>(bufferingPolicy: .unbounded) { continuation in
-            engine.onEvent = { continuation.yield(.proxy($0)) }
-            installSignalHandlers { continuation.yield(.interrupted) }
+        // Bounded stream: caps buffering to avoid unbounded memory growth during
+        // streaming responses (such as CCTV / MJPEG).
+        let events = AsyncStream<CLIEvent>(bufferingPolicy: .bufferingNewest(streamCapacity)) { continuation in
+            engine.onEvent = { event in
+                guard !isInterrupted else { return }
+                continuation.yield(.proxy(event))
+            }
+            installSignalHandlers {
+                setInterrupted()
+                continuation.yield(.interrupted)
+            }
         }
 
         // Publish captured flows for the other front-end (the GUI window attached to
         // this engine) and clear anything a previous run left behind before the first
         // snapshot lands.
         let spool = FlowSpool.Writer()
-        spool.reset()
 
         // The durable, multi-reader session log. Unlike the spool it is never cleared by
         // a reader and survives this process, so `proxymaxx-cli flows` can read the session
         // long after the engine stops. A new run starts a fresh session.
         let sessionLog = SessionLog.Writer(url: sessionLogURL(arguments))
-        sessionLog.reset()
+
+        let persistence = FlowPersistence(spool: spool, sessionLog: sessionLog)
+        await persistence.reset()
 
         try engine.start()
         // The port the engine actually bound. `start()` rewrites `configuration.port` when
@@ -99,7 +112,7 @@ enum ServeCommand {
             )
         )
         defer { ProxyRegistry.clear() }
-        defer { spool.clear() }
+        defer { persistence.clearSynchronously() }
         // The browser companion reads the proxy's port from the bridge file and nowhere
         // else, so a CLI-owned engine has to publish it too. With no app running, the
         // extension would otherwise keep pointing the browser at whatever port the last
@@ -146,8 +159,7 @@ enum ServeCommand {
             switch event {
             case .proxy(.flow(let flow)):
                 FlowFormat.emit(flow, mode: flowMode)
-                spool.write(flow)
-                sessionLog.append(flow)
+                await persistence.persist(flow)
                 summaryCount += 1
             case .proxy(.stateChanged(isRunning: false, port: _)):
                 break
@@ -161,8 +173,12 @@ enum ServeCommand {
                 engine.stop()
                 break
             }
-            if isShutdownEvent(event) { break }
+            if isInterrupted || isShutdownEvent(event) { break }
         }
+
+        engine.stop()
+        await persistence.flush()
+        await persistence.clear()
     }
 
     /// Push the whole rule file into the engine, honouring the master switches.
@@ -197,6 +213,18 @@ enum ServeCommand {
 
     private static func modified(at url: URL) -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+
+    private static let interruptLock = NSLock()
+    private static var _interrupted = false
+    private static var isInterrupted: Bool {
+        interruptLock.lock(); defer { interruptLock.unlock() }
+        return _interrupted
+    }
+    private static func setInterrupted() {
+        interruptLock.lock()
+        _interrupted = true
+        interruptLock.unlock()
     }
 
     /// Signal sources must outlive `run()` — see `installSignalHandlers`.

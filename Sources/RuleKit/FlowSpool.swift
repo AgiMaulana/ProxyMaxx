@@ -42,7 +42,7 @@ public enum FlowSpool {
     public static let maxBytes = 256 * 1024 * 1024
 
     /// Writer side: the process that hosts the engine.
-    public final class Writer {
+    public final class Writer: @unchecked Sendable {
         private let directory: URL
         private let lock = NSLock()
         private let maxSnapshots: Int
