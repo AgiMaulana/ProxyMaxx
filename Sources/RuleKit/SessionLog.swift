@@ -41,6 +41,8 @@ public enum SessionLog {
         private var lineCount = 0
         /// Bytes appended since the last reset, tracked for the same reason.
         private var byteCount = 0
+        /// Cached open file handle to avoid repeated open/seek/close overhead per snapshot.
+        private var fileHandle: FileHandle?
 
         public init(url: URL = SessionLog.defaultURL, maxLines: Int = 50_000, maxBytes: Int = 256 * 1024 * 1024) {
             self.url = url
@@ -48,10 +50,16 @@ public enum SessionLog {
             self.maxBytes = maxBytes
         }
 
+        deinit {
+            try? fileHandle?.close()
+        }
+
         /// Start a fresh session: truncate whatever a previous run left behind, so a
         /// reader never replays an old session as if it were just captured.
         public func reset() {
             lock.lock(); defer { lock.unlock() }
+            try? fileHandle?.close()
+            fileHandle = nil
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true
@@ -61,21 +69,40 @@ public enum SessionLog {
             byteCount = 0
         }
 
+        /// Close the open file handle.
+        public func close() {
+            lock.lock(); defer { lock.unlock() }
+            try? fileHandle?.close()
+            fileHandle = nil
+        }
+
+        /// Flush unwritten file buffers to disk.
+        public func flush() {
+            lock.lock(); defer { lock.unlock() }
+            try? fileHandle?.synchronize()
+        }
+
         /// Append one snapshot as a single NDJSON line. The trailing newline is written
         /// in the same call, so a follower only ever consumes complete lines.
         public func append(_ flow: Flow) {
             guard let payload = SessionLog.encodeLine(flow) else { return }
             lock.lock(); defer { lock.unlock() }
-            try? FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            if !FileManager.default.fileExists(atPath: url.path) {
-                FileManager.default.createFile(atPath: url.path, contents: nil)
+            let handle: FileHandle
+            if let existing = fileHandle {
+                handle = existing
+            } else {
+                try? FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    FileManager.default.createFile(atPath: url.path, contents: nil)
+                }
+                guard let opened = try? FileHandle(forWritingTo: url) else { return }
+                _ = try? opened.seekToEnd()
+                fileHandle = opened
+                handle = opened
             }
-            guard let handle = try? FileHandle(forWritingTo: url) else { return }
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
             let line = payload + Data("\n".utf8)
             try? handle.write(contentsOf: line)
             lineCount += 1
@@ -95,6 +122,9 @@ public enum SessionLog {
         /// Dropping everything instead would empty the log and then rewrite it on the next
         /// append, which is far worse than one oversized line.
         private func compact() {
+            try? fileHandle?.close()
+            fileHandle = nil
+
             let byteBudget = UInt64(max(1, maxBytes / 2))
             let lineBudget = max(1, maxLines / 2)
 

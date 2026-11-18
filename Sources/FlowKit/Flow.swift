@@ -91,6 +91,15 @@ public struct Flow: Identifiable, Codable, Sendable {
     public var isPending: Bool { response == nil && error == nil }
     /// True when the flow reached a terminal state (completion or error).
     public var isCompleted: Bool { timing.end != nil || error != nil }
+    /// True when the response is marked or detected as streaming (e.g. MJPEG, SSE, video/audio).
+    public var isStreaming: Bool {
+        if isStreamingResponse == true { return true }
+        guard let essence = response?.contentType?.essence.lowercased() else { return false }
+        return essence == "multipart/x-mixed-replace"
+            || essence == "text/event-stream"
+            || essence.hasPrefix("video/")
+            || essence.hasPrefix("audio/")
+    }
     /// True when this response came from a Map Local rule rather than the network.
     public var isMappedLocally: Bool { localMapSource != nil }
     public var state: FlowState {

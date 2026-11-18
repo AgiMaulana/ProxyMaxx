@@ -361,11 +361,8 @@ final class AppModel: ObservableObject {
 
     private var engine: ProxyEngine?
     private var authority: CertificateAuthority?
-    /// Publishes snapshots for the other front-end while this app hosts the engine.
-    private let flowSpool = FlowSpool.Writer()
-    /// Durable, multi-reader session record, so `proxymaxx-cli flows` can read this app's
-    /// capture too. Only written while this app owns the engine.
-    private let sessionLog = SessionLog.Writer()
+    /// Background, throttled persistence actor managing the spool and session log.
+    private let persistence = FlowPersistence()
 
     /// Set while this app owns the system proxy, so it can be put back on exit.
     /// Read from the AppKit termination handler, which is not actor-isolated.
@@ -616,8 +613,7 @@ final class AppModel: ObservableObject {
             }
             // Fresh hand-off buffer before the first snapshot, so a reader never replays
             // a previous run's flows as if they were just captured.
-            flowSpool.reset()
-            sessionLog.reset()
+            persistence.resetSynchronously()
             ingestBuffer.clear()
             startIngestDrainLoop()
             try engine.start()
@@ -657,7 +653,9 @@ final class AppModel: ObservableObject {
         boundSocksPort = nil
         stopDeviceMonitor()
         flowStore.setCapturing(false)
-        flowSpool.clear()
+        Task {
+            await persistence.drainAndClear()
+        }
         retractOwnership()
         if systemProxyEnabled {
             setSystemProxy(false)
@@ -1429,7 +1427,7 @@ final class AppModel: ObservableObject {
         // Only the engine host writes snapshots; clear them so the next run does not
         // replay this session's flows.
         if isRunning {
-            flowSpool.clear()
+            persistence.clearSynchronously()
         }
     }
 
@@ -1820,11 +1818,8 @@ final class AppModel: ObservableObject {
             }
         }
 
-        CaptureMetrics.shared.interval(CaptureSignposts.persistenceWrite) {
-            for flow in batch.flows {
-                flowSpool.write(flow)
-                sessionLog.append(flow)
-            }
+        Task {
+            await persistence.persist(batch.flows)
         }
 
         CaptureMetrics.shared.recordPersistenceWrites(batch.flows.count)
