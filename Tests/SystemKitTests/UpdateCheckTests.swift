@@ -238,6 +238,25 @@ final class UpdateCheckTests: XCTestCase {
         }
     }
 
+    func testExtractExecutablePathFindsValidExecutable() {
+        let output = "Welcome to zsh!\n/bin/ls\n"
+        XCTAssertEqual(HomebrewUpgrader.extractExecutablePath(from: output), "/bin/ls")
+        XCTAssertNil(HomebrewUpgrader.extractExecutablePath(from: "zsh:1: command not found: brew"))
+    }
+
+    func testUpgradeEnvironmentSetsPathAndDisablesAutoUpdate() {
+        let env = HomebrewUpgrader.upgradeEnvironment(
+            forBrewAt: "/opt/homebrew/bin/brew",
+            baseEnvironment: ["PATH": "/custom/bin"]
+        )
+        XCTAssertEqual(env["HOMEBREW_NO_AUTO_UPDATE"], "1")
+        XCTAssertEqual(env["HOMEBREW_NO_ENV_HINTS"], "1")
+        let path = env["PATH"] ?? ""
+        XCTAssertTrue(path.contains("/opt/homebrew/bin"))
+        XCTAssertTrue(path.contains("/usr/bin"))
+        XCTAssertTrue(path.contains("/custom/bin"))
+    }
+
     // MARK: - Revalidation
 
     func testUpdateRequestsBypassTheSystemProxy() {

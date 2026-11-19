@@ -42,10 +42,18 @@ enum Shell {
     /// `stdin` is written and closed before the output is read, so a script that asks a
     /// question on standard input gets an answer rather than an immediate end of file.
     @discardableResult
-    static func run(_ launchPath: String, _ arguments: [String], stdin: String? = nil) throws -> ShellResult {
+    static func run(
+        _ launchPath: String,
+        _ arguments: [String],
+        stdin: String? = nil,
+        environment: [String: String]? = nil
+    ) throws -> ShellResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = arguments
+        if let environment {
+            process.environment = environment
+        }
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

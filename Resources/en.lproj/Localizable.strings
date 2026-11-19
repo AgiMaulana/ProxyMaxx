@@ -350,6 +350,7 @@
 "update.prompt.dismissHelp" = "Not now. ProxyMaxx will offer this version again on the next launch, and a newer release is always offered.";
 "update.prompt.releasePage" = "Release Notes";
 "update.prompt.upgrade" = "Upgrade Now";
+"update.prompt.relaunch" = "Relaunch Now";
 "update.prompt.upgrading" = "Upgrading with Homebrew…";
 "update.settings.title" = "Updates";
 "update.settings.installed" = "Installed version %@";
