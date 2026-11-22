@@ -751,10 +751,16 @@ struct UpdatePromptView: View {
             }
 
             HStack(spacing: 8) {
-                Button("update.prompt.releasePage") { model.openReleasePage() }
-                    .buttonStyle(.bordered)
+                if model.availableUpdate != nil {
+                    Button("update.prompt.releasePage") { model.openReleasePage() }
+                        .buttonStyle(.bordered)
+                }
                 Spacer(minLength: 12)
-                if model.canRunUpdate {
+                if model.updateUpgradeSucceeded {
+                    Button("update.prompt.relaunch") { model.relaunchUpdatedApp() }
+                        .buttonStyle(.borderedProminent)
+                        .fixedSize()
+                } else if model.canRunUpdate {
                     Button("update.prompt.upgrade") { model.runUpdateUpgrade() }
                         .buttonStyle(.borderedProminent)
                         .fixedSize()
@@ -857,7 +863,10 @@ struct UpdateSettingsCard: View {
                     Spacer(minLength: 0)
                 }
                 HStack(spacing: 8) {
-                    if model.canRunUpdate {
+                    if model.updateUpgradeSucceeded {
+                        Button("update.prompt.relaunch") { model.relaunchUpdatedApp() }
+                            .controlSize(.small)
+                    } else if model.canRunUpdate {
                         Button("update.prompt.upgrade") { model.runUpdateUpgrade() }
                             .controlSize(.small)
                     }

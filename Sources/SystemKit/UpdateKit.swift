@@ -614,15 +614,15 @@ public enum UpdatePlan {
     }
 }
 
-/// Runs `brew`, never from the app's own environment: a Finder-launched app inherits none of
-/// the shell's `PATH`, and Homebrew's `bin` is not in the system default. `/bin/zsh -lc`
-/// sources the login profile, which is where the user's `brew` is set up.
+/// Runs `brew`, never from the app's bare environment: a Finder-launched app inherits none
+/// of the shell's `PATH`, and Homebrew's `bin` is not in the system default. Resolves the
+/// `brew` binary absolutely and runs it with Homebrew's prefixes prepended to `PATH`.
 public enum HomebrewUpgrader {
     public static let shell = "/bin/zsh"
     /// The prefixes Homebrew installs itself to, in the order a Mac normally has them.
     /// A login shell cannot be trusted to find `brew`: the PATH often comes from `.zshrc`,
-    /// which the non-interactive `zsh -lc` used here never reads, so an upgrade is always
-    /// launched with an absolute brew path resolved below rather than a bare `brew`.
+    /// which the non-interactive `zsh -lc` never reads, so an upgrade is always launched
+    /// with an absolute brew path resolved below rather than a bare `brew`.
     public static let knownBrewPaths = [
         "/opt/homebrew/bin/brew",
         "/usr/local/bin/brew",
@@ -646,9 +646,8 @@ public enum HomebrewUpgrader {
     }
 
     /// Resolves `brew` without trusting the login profile's PATH: the known prefixes
-    /// first, then `command -v` under the login shell for a Homebrew living somewhere
-    /// unusual. A Finder-launched app inherits no `PATH`, and the login profile is only a
-    /// fallback because `.zshrc` — where many setups export it — is never read here.
+    /// first, then the current process PATH, then `command -v` under a login and
+    /// interactive login shell for a Homebrew living somewhere unusual.
     public static func brewPath(
         candidates: [String] = knownBrewPaths,
         fileManager: FileManager = .default
@@ -656,12 +655,101 @@ public enum HomebrewUpgrader {
         if let known = candidates.first(where: { fileManager.isExecutableFile(atPath: $0) }) {
             return known
         }
-        guard let result = try? Shell.run(shell, ["-lc", "command -v brew"]) else { return nil }
-        guard result.succeeded else { return nil }
-        let resolved = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        // `command -v` answers one path when brew exists; anything multiline is noise.
-        guard !resolved.isEmpty, !resolved.contains("\n") else { return nil }
-        return resolved
+        if candidates == knownBrewPaths {
+            let home = fileManager.homeDirectoryForCurrentUser.path
+            let extraCandidates = [
+                "\(home)/.homebrew/bin/brew",
+                "\(home)/homebrew/bin/brew",
+            ]
+            if let extra = extraCandidates.first(where: { fileManager.isExecutableFile(atPath: $0) }) {
+                return extra
+            }
+            if let pathEnv = ProcessInfo.processInfo.environment["PATH"] {
+                for entry in pathEnv.split(separator: ":") where !entry.isEmpty {
+                    let candidate = URL(fileURLWithPath: String(entry))
+                        .appendingPathComponent("brew").path
+                    if fileManager.isExecutableFile(atPath: candidate) {
+                        return candidate
+                    }
+                }
+            }
+        }
+        for flags in [["-lc", "command -v brew"], ["-ilc", "command -v brew"]] {
+            guard let result = try? Shell.run(shell, flags), result.succeeded else { continue }
+            if let resolved = extractExecutablePath(from: result.output, fileManager: fileManager) {
+                return resolved
+            }
+        }
+        return nil
+    }
+
+    /// Extracts the last valid executable path from shell output, ignoring any startup
+    /// banners or messages printed by `.zshenv`, `.zprofile` or `.zshrc` before `command -v`.
+    public static func extractExecutablePath(
+        from output: String,
+        fileManager: FileManager = .default
+    ) -> String? {
+        for rawLine in output.split(whereSeparator: \.isNewline).reversed() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("/"), fileManager.isExecutableFile(atPath: line) else { continue }
+            return line
+        }
+        return nil
+    }
+
+    /// Builds an environment for `brew` and its child processes with Homebrew's `bin` and
+    /// `sbin` directories prepended to `PATH`, so any helper or cask stanza that invokes
+    /// `brew` or other Homebrew tools finds them even when launched from Finder.
+    public static func upgradeEnvironment(
+        forBrewAt brewPath: String,
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        var env = baseEnvironment
+        let brewURL = URL(fileURLWithPath: brewPath)
+        let brewBinDir = brewURL.deletingLastPathComponent().path
+        let brewSbinDir = brewURL.deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("sbin").path
+
+        let preferredDirs = [
+            brewBinDir,
+            brewSbinDir,
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+        ]
+        let existingDirs = (env["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        var combinedPath: [String] = []
+        for dir in preferredDirs + existingDirs where !dir.isEmpty {
+            if seen.insert(dir).inserted {
+                combinedPath.append(dir)
+            }
+        }
+        env["PATH"] = combinedPath.joined(separator: ":")
+        env["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+        env["HOMEBREW_NO_ENV_HINTS"] = "1"
+        return env
+    }
+
+    /// The local git checkout of the `AgiMaulana/proxymaxx` tap under `brew`'s prefix.
+    public static func tapRepositoryURL(forBrewAt brewPath: String) -> URL {
+        let prefix = URL(fileURLWithPath: brewPath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return prefix
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Taps", isDirectory: true)
+            .appendingPathComponent("agimaulana", isDirectory: true)
+            .appendingPathComponent("homebrew-proxymaxx", isDirectory: true)
     }
 
     /// True when a `brew` answers at all. A copy installed by Homebrew always has one, so
@@ -670,9 +758,11 @@ public enum HomebrewUpgrader {
         brewPath() != nil
     }
 
-    /// Runs the upgrade with `HOMEBREW_NO_AUTO_UPDATE=1`: the cask's own metadata is
-    /// refreshed by the tap, and the unconditional auto-update would turn a one-cask upgrade
-    /// into a multi-minute Homebrew update the user did not ask for.
+    /// Runs the upgrade directly through the resolved `brew` executable with
+    /// `HOMEBREW_NO_AUTO_UPDATE=1`: our tap is fast-forwarded first so the newly released
+    /// cask version is visible without triggering a multi-minute full Homebrew update, and
+    /// `brew` is invoked directly rather than through `zsh -lc` so user shell profiles
+    /// cannot fail with `command not found: brew`.
     public static func upgrade() -> Outcome {
         guard let brew = brewPath() else {
             return Outcome(
@@ -681,8 +771,20 @@ public enum HomebrewUpgrader {
                 brewMissing: true
             )
         }
-        let script = "HOMEBREW_NO_AUTO_UPDATE=1 \(brew) upgrade --cask \(InstallOriginDetector.caskReference)"
-        guard let result = try? Shell.run(shell, ["-lc", script]) else {
+        let env = upgradeEnvironment(forBrewAt: brew)
+        let tapURL = tapRepositoryURL(forBrewAt: brew)
+        if FileManager.default.fileExists(atPath: tapURL.path) {
+            _ = try? Shell.run(
+                "/usr/bin/git",
+                ["-C", tapURL.path, "pull", "--ff-only", "--quiet"],
+                environment: env
+            )
+        }
+        guard let result = try? Shell.run(
+            brew,
+            ["upgrade", "--cask", InstallOriginDetector.caskReference],
+            environment: env
+        ) else {
             return Outcome(succeeded: false, output: "The update command could not be started.", brewMissing: true)
         }
         let output = [result.output, result.error]

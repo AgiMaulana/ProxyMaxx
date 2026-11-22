@@ -167,6 +167,9 @@ final class AppModel: ObservableObject {
     /// Non-nil while `brew upgrade` runs, so the balloon can show progress instead of
     /// offering the button twice.
     @Published private(set) var updateUpgradeInFlight = false
+    /// True once `brew upgrade` succeeded during this session, so the balloon can offer a
+    /// one-click relaunch into the newly installed bundle.
+    @Published private(set) var updateUpgradeSucceeded = false
     /// What went wrong with the last upgrade attempt. Shown in the balloon, next to the
     /// command the user can copy instead.
     @Published private(set) var updateUpgradeFailure: String?
@@ -179,7 +182,9 @@ final class AppModel: ObservableObject {
     var updateCommand: String { UpdatePlan.homebrewCommand(for: installOrigin) }
 
     /// True when "Upgrade Now" is a real option rather than a command to copy.
-    var canRunUpdate: Bool { installOrigin == .homebrew && !updateUpgradeInFlight }
+    var canRunUpdate: Bool {
+        installOrigin == .homebrew && availableUpdate != nil && !updateUpgradeInFlight && !updateUpgradeSucceeded
+    }
 
     /// Decides the install origin once, then asks GitHub when a check is due: the first
     /// ever check waits for its daily window, and once an ETag is known every launch
@@ -250,10 +255,10 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             updateUpgradeInFlight = false
             if outcome.succeeded {
+                updateUpgradeSucceeded = true
                 updateCheckMessage = L10n.string("update.upgrade.succeeded")
                 // The installed copy is now the new release: a relaunch is all that is left.
                 availableUpdate = nil
-                showUpdatePrompt = false
                 UpdateCheckState.recordCheck()
             } else {
                 updateUpgradeFailure = outcome.output.isEmpty
@@ -261,6 +266,30 @@ final class AppModel: ObservableObject {
                     : outcome.output
             }
         }
+    }
+
+    /// Quits this process and reopens the newly installed app bundle once this PID exits.
+    func relaunchUpdatedApp() {
+        let bundleURL: URL = {
+            let current = Bundle.main.bundleURL
+            if current.pathExtension == "app" {
+                return current
+            }
+            return URL(fileURLWithPath: InstallOriginDetector.applicationsDirectory)
+                .appendingPathComponent(InstallOriginDetector.appBundleName)
+        }()
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            "-c",
+            #"while kill -0 "$1" 2>/dev/null; do sleep 0.1; done; open "$2""#,
+            "--",
+            "\(pid)",
+            bundleURL.path,
+        ]
+        try? process.run()
+        NSApplication.shared.terminate(nil)
     }
 
     private func runUpdateCheck(manual: Bool) {
