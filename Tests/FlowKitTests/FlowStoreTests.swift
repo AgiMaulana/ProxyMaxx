@@ -60,6 +60,10 @@ final class FlowStoreTests: XCTestCase {
         XCTAssertEqual(store.flow(withID: id)?.response?.statusCode, 204)
     }
 
+    /// The publish task is scheduled, so its latency is not fixed — CI runners routinely
+    /// exceed a fixed sleep, and a 60 ms wait under load misses the bump entirely. Wait
+    /// for it with a deadline instead; the assertions still verify the coalescing
+    /// contract (exactly one bump per batch, not one per flow).
     @MainActor
     func testOneRevisionPerBatch() async throws {
         let store = FlowStore()
@@ -70,17 +74,28 @@ final class FlowStoreTests: XCTestCase {
         let flows = (0..<5).map { makeFlow(path: "/flow-\($0)") }
         store.upsert(flows)
 
-        // Give the publish task enough time to fire
-        try await Task.sleep(for: .milliseconds(60))
-
+        try await waitUntilRevision(store, atLeast: 1)
         XCTAssertEqual(store.revision, 1)
 
         let moreFlows = (5..<10).map { makeFlow(path: "/flow-\($0)") }
         store.upsert(moreFlows)
 
-        try await Task.sleep(for: .milliseconds(60))
-
+        try await waitUntilRevision(store, atLeast: 2)
         XCTAssertEqual(store.revision, 2)
+    }
+
+    /// Polls until the store's revision reaches `target`, failing after a generous
+    /// deadline rather than at a fixed sleep that assumes scheduler latency.
+    @MainActor
+    private func waitUntilRevision(_ store: FlowStore, atLeast target: Int) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while store.revision < target {
+            if Date() > deadline {
+                XCTFail("revision never reached \(target) (still \(store.revision))")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     @MainActor
