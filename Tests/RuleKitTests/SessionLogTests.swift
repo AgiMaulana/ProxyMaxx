@@ -211,6 +211,36 @@ final class SessionLogFollowerTests: XCTestCase {
         XCTAssertEqual(follower.poll().map(\.request.path), ["/first", "/second"])
     }
 
+    /// HTTP/2 groundwork (#79): the capture schema carries a non-1.1 protocol tag
+    /// through the session log unchanged, so later phases can tag flows `HTTP/2`
+    /// without touching the NDJSON contract. `HTTP/3` stands in for any future tag.
+    func testHTTPVersionRoundTripsThroughNDJSON() throws {
+        let writer = SessionLog.Writer(url: url)
+
+        var flow = makeFlow("/h2", body: "h2-body")
+        flow.request.httpVersion = "HTTP/2"
+        flow.response = HTTPResponse(statusCode: 200, httpVersion: "HTTP/2", body: Data("h2-body".utf8))
+        flow.timing.end = Date()
+        writer.append(flow)
+
+        var next = makeFlow("/h3")
+        next.request.httpVersion = "HTTP/3"
+        next.response = HTTPResponse(statusCode: 200, httpVersion: "HTTP/3", body: Data("h3-body".utf8))
+        writer.append(next)
+
+        let lines = try String(contentsOf: url, encoding: .utf8)
+        // The shared JSON encoder escapes forward slashes, so the on-disk text of the tag
+        // is `HTTP\/2`. The session log's contract is decode-what-you-wrote, not the raw
+        // bytes, and the reader below restores the value exactly.
+        XCTAssertTrue(lines.contains(#""httpVersion":"HTTP\/2""#), "the written line must carry the tag verbatim")
+        XCTAssertTrue(lines.contains(#""httpVersion":"HTTP\/3""#))
+
+        let read = SessionLog.read(url: url)
+        XCTAssertEqual(read.map(\.request.path), ["/h2", "/h3"])
+        XCTAssertEqual(read.map(\.request.httpVersion), ["HTTP/2", "HTTP/3"])
+        XCTAssertEqual(read.map(\.response?.httpVersion), ["HTTP/2", "HTTP/3"])
+    }
+
     private func makeFlow(_ path: String, body: String = "hello", closed: Bool = true) -> Flow {
         var flow = Flow(request: HTTPRequest(
             method: "GET",

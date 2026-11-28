@@ -1,0 +1,36 @@
+name: Tests
+
+# The regression gate for HTTP/2 work (#79): the full suite, including the HTTP/1.1
+# end-to-end integration tests, must stay green on every phase that touches the proxy
+# engine. See docs and the Phase 0 issue for the recorded baseline.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: swift test (macOS)
+    # macOS-only code paths (SystemKit, ClientKit via libproc) and the SwiftUI target
+    # need a macOS runner; macos-26 ships the Swift version the pinned dependencies
+    # require — same image the release workflow builds on.
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Resolve strictly from the lockfile, matching the release workflow: a pin that
+      # no longer resolves fails here, by name, before any test runs.
+      - name: Verify the pinned dependencies
+        run: |
+          swift --version
+          swift package resolve --force-resolved-versions
+
+      - name: Run tests
+        run: swift test
