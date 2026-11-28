@@ -24,6 +24,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.27.0"),
+        // HTTP/2 (RFC 7540). Phase 0 wires this into the test target only, for an h2
+        // origin fixture and gRPC-style sample traffic; the engine adopts it in Phase 2.
+        .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.34.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-asn1.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.8.0"),
@@ -128,6 +131,8 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ]
         ),
