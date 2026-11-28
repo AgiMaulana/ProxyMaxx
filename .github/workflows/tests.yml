@@ -3,10 +3,12 @@ name: Tests
 # The regression gate for HTTP/2 work (#79): the full suite, including the HTTP/1.1
 # end-to-end integration tests, must stay green on every phase that touches the proxy
 # engine. See docs and the Phase 0 issue for the recorded baseline.
+#
+# Runs on PRs only. Branch protection on `main` requires linear history and
+# up-to-date branches (the "Update branch" button rebases under that rule), so
+# every merge lands exactly what this workflow verified at the tip of `main`
+# plus the PR's commits — a `push` run for `main` would only repeat the work.
 on:
-  push:
-    branches:
-      - main
   pull_request:
   workflow_dispatch:
 
